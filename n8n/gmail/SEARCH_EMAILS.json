@@ -1,0 +1,174 @@
+{
+  "name": "MCP — Gmail Search",
+  "description": null,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "query"
+            },
+            {
+              "name": "limit",
+              "type": "number"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -400,
+        -32
+      ],
+      "id": "d7869e2a-d0a9-4fcf-8e9a-d61fb7884c13",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "limit": "={{$json.limit}}",
+        "filters": {
+          "q": "={{$json.query}}"
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        -176,
+        -32
+      ],
+      "id": "abc2cb1b-2f91-444e-873e-cae86de2012a",
+      "name": "Get many messages",
+      "webhookId": "f5591731-77e9-451c-82a8-5f202c71fcb2",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "FJ3qlbs3RFMHmomW",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  const j = item.json;\n\n  return {\n    json: {\n      id: j.id ?? null,\n      threadId: j.threadId ?? null,\n      from: j.from?.text ?? null,\n      to: j.to?.text ?? null,\n      subject: j.subject ?? null,\n      date: j.date ?? null,\n      body: j.text ?? null\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        272,
+        -32
+      ],
+      "id": "b199a95d-7dd2-4288-bad0-9415cb085435",
+      "name": "Format email results"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "messageId": "={{$json.id}}",
+        "simple": false,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        48,
+        -32
+      ],
+      "id": "1ae4481d-62e1-4528-a061-52fc725e2ded",
+      "name": "Get a message",
+      "webhookId": "8cd73b85-359b-4816-ba4c-f0b300922fa9",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "FJ3qlbs3RFMHmomW",
+          "name": "Gmail account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Get many messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get many messages": {
+      "main": [
+        [
+          {
+            "node": "Get a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get a message": {
+      "main": [
+        [
+          {
+            "node": "Format email results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "nodeGroups": [],
+  "pinData": {
+    "When Executed by Another Workflow": [
+      {
+        "json": {
+          "query": "newer_than:7d",
+          "limit": 5
+        }
+      }
+    ]
+  },
+  "activeVersionId": "dc411451-ef34-4f86-a8e5-55d8e0265a09",
+  "versionCounter": 20,
+  "triggerCount": 0,
+  "sourceWorkflowId": null,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-09-03T19:33:25.856Z",
+      "createdAt": "2026-09-03T19:33:25.856Z",
+      "role": "workflow:owner",
+      "workflowId": "tUxRIiXHh2UaWflF",
+      "projectId": "x92yC4agLVaxmmyf",
+      "project": {
+        "updatedAt": "2026-08-22T20:38:05.582Z",
+        "createdAt": "2026-08-22T18:46:49.400Z",
+        "id": "x92yC4agLVaxmmyf",
+        "name": "Vitalii Pokhyl <pokhylvitalii@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "beb98494-dbaf-489c-9de8-6abf234326a4"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": "Version dc411451",
+    "description": ""
+  }
+}

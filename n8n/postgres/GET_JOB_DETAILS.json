@@ -1,0 +1,110 @@
+{
+  "name": "MCP — PostgreSQL Job Details",
+  "description": null,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "job_id"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -560,
+        -80
+      ],
+      "id": "133ddc6c-103d-4944-bbae-d79390e2ff20",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  id,\n  topic,\n  language_code,\n  target_duration_seconds,\n  status,\n  current_stage,\n  last_error,\n  review_decision,\n  review_notes,\n  created_at,\n  updated_at\nFROM jobs\nWHERE id = $1::uuid\nLIMIT 1;",
+        "options": {
+          "queryReplacement": "={{$json.job_id}}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        -336,
+        -80
+      ],
+      "id": "3cd43895-2ec8-4808-9a6d-330d844bad1e",
+      "name": "Execute a SQL query",
+      "credentials": {
+        "postgres": {
+          "id": "Zj9PZx7iF6uK469i",
+          "name": "mcp_read"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "nodeGroups": [],
+  "pinData": {
+    "When Executed by Another Workflow": [
+      {
+        "json": {
+          "job_id": "4372be34-c417-415f-92f6-63481b3b5686"
+        }
+      }
+    ]
+  },
+  "activeVersionId": "81b58fb6-1cba-4a31-8a7f-2b905ba0fbcd",
+  "versionCounter": 8,
+  "triggerCount": 0,
+  "sourceWorkflowId": null,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-09-03T15:46:31.390Z",
+      "createdAt": "2026-09-03T15:46:31.390Z",
+      "role": "workflow:owner",
+      "workflowId": "kSWCbIsNogHB5YC3",
+      "projectId": "x92yC4agLVaxmmyf",
+      "project": {
+        "updatedAt": "2026-08-22T20:38:05.582Z",
+        "createdAt": "2026-08-22T18:46:49.400Z",
+        "id": "x92yC4agLVaxmmyf",
+        "name": "Vitalii Pokhyl <pokhylvitalii@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "beb98494-dbaf-489c-9de8-6abf234326a4"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": "Version 81b58fb6",
+    "description": ""
+  }
+}

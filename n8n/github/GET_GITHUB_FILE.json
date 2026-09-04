@@ -1,0 +1,142 @@
+{
+  "name": "MCP — GitHub Read File",
+  "description": null,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "path"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -608,
+        -48
+      ],
+      "id": "39b70646-e7fe-434a-af56-0dafe62f9ec6",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "operation": "get",
+        "owner": {
+          "__rl": true,
+          "value": "Pokhyl",
+          "mode": "list",
+          "cachedResultName": "Pokhyl",
+          "cachedResultUrl": "https://github.com/Pokhyl"
+        },
+        "repository": {
+          "__rl": true,
+          "value": "ai-short-form-content-factory",
+          "mode": "list",
+          "cachedResultName": "ai-short-form-content-factory",
+          "cachedResultUrl": "https://github.com/Pokhyl/ai-short-form-content-factory"
+        },
+        "filePath": "={{$json.path}}",
+        "asBinaryProperty": false,
+        "additionalParameters": {}
+      },
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        -384,
+        -48
+      ],
+      "id": "024409d9-30d1-45d5-8b1b-1452502c4a1a",
+      "name": "Get a file",
+      "webhookId": "0c32d599-be1a-4643-89c3-512ebd54f926",
+      "credentials": {
+        "githubApi": {
+          "id": "pFfZbFQwPiCM0f1v",
+          "name": "GitHub account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const encoded = $json.content;\n\nif (typeof encoded !== 'string' || !encoded) {\n  throw new Error('GitHub response does not contain file content');\n}\n\nconst content = Buffer\n  .from(encoded.replace(/\\s/g, ''), 'base64')\n  .toString('utf8');\n\nreturn {\n  json: {\n    name: $json.name,\n    path: $json.path,\n    sha: $json.sha,\n    content\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -160,
+        -48
+      ],
+      "id": "ade81c78-3510-4dbe-8fb0-1b2f244c930b",
+      "name": "Decode GitHub Content"
+    }
+  ],
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Get a file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get a file": {
+      "main": [
+        [
+          {
+            "node": "Decode GitHub Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "nodeGroups": [],
+  "pinData": {},
+  "activeVersionId": "11c32f55-623e-4106-acce-3ac4867a7ad3",
+  "versionCounter": 15,
+  "triggerCount": 0,
+  "sourceWorkflowId": null,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-09-02T18:56:19.974Z",
+      "createdAt": "2026-09-02T18:56:19.974Z",
+      "role": "workflow:owner",
+      "workflowId": "FLsgn6x0wzoDCsNf",
+      "projectId": "x92yC4agLVaxmmyf",
+      "project": {
+        "updatedAt": "2026-08-22T20:38:05.582Z",
+        "createdAt": "2026-08-22T18:46:49.400Z",
+        "id": "x92yC4agLVaxmmyf",
+        "name": "Vitalii Pokhyl <pokhylvitalii@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "beb98494-dbaf-489c-9de8-6abf234326a4"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": "Version 11c32f55",
+    "description": ""
+  }
+}
