@@ -10,78 +10,168 @@ Status: active.
 
 Authentication: n8n OAuth2 user authentication for the MCP endpoint.
 
-Current tool nodes in the deployed workflow:
+Current production tool surface:
 
-- `hello_world` — legacy test tool
-- `get_person` — legacy test tool
-- `get_github_file` — production read tool
-- `get_recent_jobs` — production read tool
-- `get_job_details` — production read tool
-- `search_emails` — production read tool
+- `get_github_file`
+- `get_recent_jobs`
+- `get_job_details`
+- `search_emails`
+
+Legacy tools `hello_world` and `get_person` have been removed from the deployed MCP server.
+
+## Normalized MCP contract
+
+All four current read tools return the same success envelope:
+
+```json
+{
+  "success": true,
+  "data": "...",
+  "meta": {
+    "tool": "...",
+    "count": 1
+  }
+}
+```
+
+Errors use the normalized envelope:
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "...",
+    "message": "..."
+  },
+  "meta": {
+    "tool": "...",
+    "count": 0
+  }
+}
+```
+
+Current error codes used by the deployed read tools:
+
+- `INVALID_INPUT`
+- `NOT_FOUND`
+- `UPSTREAM_ERROR`
 
 ## Implemented sub-workflows
 
 ### Gmail
 
-`MCP — Gmail Search`
+Workflow: `MCP — Gmail Search`
+
+Status: active.
 
 Inputs:
 
-- `query` — string, Gmail search syntax
-- `limit` — number
+- `query` — required non-empty Gmail search string
+- `limit` — optional integer, default `5`, allowed range `1..50`
 
-Flow:
+Current flow:
 
 ```text
 When Executed by Another Workflow
- -> Get many messages
- -> Get a message
- -> Format email results
+ -> Validate input
+ -> Is input valid?
+    -> false: Format invalid input error
+    -> true: Get many messages
+       -> Error: Format Gmail error
+       -> Success: Get a message
+          -> Error: Format Gmail error
+          -> Success: Format email results
+             -> Format MCP response
 ```
 
-The workflow searches matching messages, fetches the full message body, and returns a normalized text-first response.
+`Format email results` returns:
+
+- `id`
+- `threadId`
+- `from`
+- `to`
+- `subject`
+- `date`
+- `body`
+
+Invalid input returns `INVALID_INPUT`. Gmail-node failures are normalized to `UPSTREAM_ERROR` with `Gmail request failed`.
+
+Manual invalid-input, error-route, and success regression checks were completed before the latest publish.
 
 ### GitHub
 
-`MCP — GitHub Read File`
+Workflow: `MCP — GitHub Read File`
+
+Status: active.
 
 Input:
 
 - `path` — repository-relative path
 
-The current implementation reads files from the existing portfolio/production repository using a restricted GitHub credential and decodes the returned content.
+The GitHub node uses a separate Error output. A missing file is normalized to `NOT_FOUND`; other GitHub failures fall back to `UPSTREAM_ERROR`.
+
+Verified missing-file case:
+
+- input: `docs/THIS_FILE_DOES_NOT_EXIST.md`
+- upstream message: `The resource you are requesting could not be found`
+- normalized code: `NOT_FOUND`
+
+Success regression was checked with `docs/CURRENT_STATE.md`.
 
 ### PostgreSQL
 
-`MCP — PostgreSQL Recent Jobs`
+Workflow: `MCP — PostgreSQL Recent Jobs`
+
+Status: active.
 
 Input:
 
-- `limit` — number
+- `limit` — optional integer, default `10`, allowed range `1..50`
 
-Returns recent job metadata.
+Invalid input is rejected before PostgreSQL with `INVALID_INPUT`. Database failures are normalized to `UPSTREAM_ERROR`. Success regression with `limit: 5` was completed.
 
-`MCP — PostgreSQL Job Details`
+Workflow: `MCP — PostgreSQL Job Details`
+
+Status: active.
 
 Input:
 
 - `job_id` — UUID string
 
-Returns detailed runtime state including current stage and last error.
+UUID validation happens before PostgreSQL. Zero-row results are handled separately and return `NOT_FOUND`. Database failures return `UPSTREAM_ERROR`.
+
+Verified success job:
+
+`4372be34-c417-415f-92f6-63481b3b5686`
+
+## Repository export state
+
+The current deployed versions of these workflows are exported to this repository:
+
+- `n8n/MCP_SERVER.json`
+- `n8n/github/GET_GITHUB_FILE.json`
+- `n8n/gmail/SEARCH_EMAILS.json`
+- `n8n/postgres/GET_RECENT_JOBS.json`
+- `n8n/postgres/GET_JOB_DETAILS.json`
+
+The exports reference n8n credentials by credential metadata; no plaintext credential values were intentionally added to the repository.
 
 ## Security state
 
-- Gmail credential stored only in n8n credentials storage.
-- GitHub credential stored only in n8n credentials storage.
+- Gmail credential is stored in n8n credentials storage.
+- GitHub credential is stored in n8n credentials storage.
 - PostgreSQL MCP credential is read-only.
 - No write-capable business tool is exposed through MCP yet.
-- Audit log schema is defined in this repository but not yet wired into every tool invocation.
+- Audit log schema is defined in this repository but is not yet wired into every tool invocation.
 
-## Known gaps
+## Remaining M1 work
 
-1. Remove `hello_world` and `get_person` from the production MCP surface.
-2. Add tool-call audit logging.
-3. Add normalized error contracts.
-4. Add Drive and Calendar read tools.
-5. Add Gmail attachment retrieval as a separate tool.
-6. Add write tools only behind explicit approval.
+1. Add centralized tool-call audit logging.
+2. Redact sensitive audit arguments.
+3. Add a dedicated documented acceptance-test set for all current tools.
+
+## Later gaps
+
+1. Add Drive and Calendar read tools.
+2. Add Gmail attachment retrieval as a separate tool.
+3. Add write tools only behind explicit approval.
