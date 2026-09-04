@@ -1,142 +1,202 @@
-{
-  "name": "MCP — GitHub Read File",
-  "description": null,
-  "isArchived": false,
-  "nodes": [
-    {
-      "parameters": {
-        "workflowInputs": {
-          "values": [
+[
+  {
+    "updatedAt": "2026-09-04T13:18:33.033Z",
+    "createdAt": "2026-09-02T18:56:19.974Z",
+    "id": "FLsgn6x0wzoDCsNf",
+    "name": "MCP — GitHub Read File",
+    "description": null,
+    "active": true,
+    "isArchived": false,
+    "nodes": [
+      {
+        "parameters": {
+          "workflowInputs": {
+            "values": [
+              {
+                "name": "path"
+              }
+            ]
+          }
+        },
+        "type": "n8n-nodes-base.executeWorkflowTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          -608,
+          -48
+        ],
+        "id": "39b70646-e7fe-434a-af56-0dafe62f9ec6",
+        "name": "When Executed by Another Workflow"
+      },
+      {
+        "parameters": {
+          "resource": "file",
+          "operation": "get",
+          "owner": {
+            "__rl": true,
+            "value": "Pokhyl",
+            "mode": "list",
+            "cachedResultName": "Pokhyl",
+            "cachedResultUrl": "https://github.com/Pokhyl"
+          },
+          "repository": {
+            "__rl": true,
+            "value": "ai-short-form-content-factory",
+            "mode": "list",
+            "cachedResultName": "ai-short-form-content-factory",
+            "cachedResultUrl": "https://github.com/Pokhyl/ai-short-form-content-factory"
+          },
+          "filePath": "={{$json.path}}",
+          "asBinaryProperty": false,
+          "additionalParameters": {}
+        },
+        "type": "n8n-nodes-base.github",
+        "typeVersion": 1.1,
+        "position": [
+          -384,
+          -48
+        ],
+        "id": "024409d9-30d1-45d5-8b1b-1452502c4a1a",
+        "name": "Get a file",
+        "webhookId": "0c32d599-be1a-4643-89c3-512ebd54f926",
+        "credentials": {
+          "githubApi": {
+            "id": "pFfZbFQwPiCM0f1v",
+            "name": "GitHub account"
+          }
+        },
+        "onError": "continueErrorOutput"
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForEachItem",
+          "jsCode": "const encoded = $json.content;\n\nif (typeof encoded !== 'string' || !encoded) {\n  throw new Error('GitHub response does not contain file content');\n}\n\nconst content = Buffer\n  .from(encoded.replace(/\\s/g, ''), 'base64')\n  .toString('utf8');\n\nreturn {\n  json: {\n    name: $json.name,\n    path: $json.path,\n    sha: $json.sha,\n    content\n  }\n};"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -144,
+          -64
+        ],
+        "id": "ade81c78-3510-4dbe-8fb0-1b2f244c930b",
+        "name": "Decode GitHub Content"
+      },
+      {
+        "parameters": {
+          "jsCode": "const data = items[0]?.json ?? null;\n\nreturn [\n  {\n    json: {\n      success: true,\n      data,\n      meta: {\n        tool: 'get_github_file',\n        count: data ? 1 : 0\n      }\n    }\n  }\n];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          80,
+          -64
+        ],
+        "id": "801335d3-6557-4165-9527-31befddca90c",
+        "name": "Format MCP response"
+      },
+      {
+        "parameters": {
+          "jsCode": "const input = items[0]?.json ?? {};\n\nconst message =\n  typeof input.error === 'string' && input.error.trim()\n    ? input.error.trim()\n    : 'GitHub request failed';\n\nconst code =\n  /not found|could not be found/i.test(message)\n    ? 'NOT_FOUND'\n    : 'UPSTREAM_ERROR';\n\nreturn [\n  {\n    json: {\n      success: false,\n      error: {\n        code,\n        message\n      },\n      meta: {\n        tool: 'get_github_file',\n        count: 0\n      }\n    }\n  }\n];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -128,
+          144
+        ],
+        "id": "96cb6337-9dd0-47e7-aace-40b742645003",
+        "name": "Format MCP error"
+      }
+    ],
+    "connections": {
+      "When Executed by Another Workflow": {
+        "main": [
+          [
             {
-              "name": "path"
+              "node": "Get a file",
+              "type": "main",
+              "index": 0
             }
           ]
-        }
+        ]
       },
-      "type": "n8n-nodes-base.executeWorkflowTrigger",
-      "typeVersion": 1.2,
-      "position": [
-        -608,
-        -48
-      ],
-      "id": "39b70646-e7fe-434a-af56-0dafe62f9ec6",
-      "name": "When Executed by Another Workflow"
-    },
-    {
-      "parameters": {
-        "resource": "file",
-        "operation": "get",
-        "owner": {
-          "__rl": true,
-          "value": "Pokhyl",
-          "mode": "list",
-          "cachedResultName": "Pokhyl",
-          "cachedResultUrl": "https://github.com/Pokhyl"
-        },
-        "repository": {
-          "__rl": true,
-          "value": "ai-short-form-content-factory",
-          "mode": "list",
-          "cachedResultName": "ai-short-form-content-factory",
-          "cachedResultUrl": "https://github.com/Pokhyl/ai-short-form-content-factory"
-        },
-        "filePath": "={{$json.path}}",
-        "asBinaryProperty": false,
-        "additionalParameters": {}
+      "Get a file": {
+        "main": [
+          [
+            {
+              "node": "Decode GitHub Content",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Format MCP error",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       },
-      "type": "n8n-nodes-base.github",
-      "typeVersion": 1.1,
-      "position": [
-        -384,
-        -48
-      ],
-      "id": "024409d9-30d1-45d5-8b1b-1452502c4a1a",
-      "name": "Get a file",
-      "webhookId": "0c32d599-be1a-4643-89c3-512ebd54f926",
-      "credentials": {
-        "githubApi": {
-          "id": "pFfZbFQwPiCM0f1v",
-          "name": "GitHub account"
-        }
+      "Decode GitHub Content": {
+        "main": [
+          [
+            {
+              "node": "Format MCP response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       }
     },
-    {
-      "parameters": {
-        "mode": "runOnceForEachItem",
-        "jsCode": "const encoded = $json.content;\n\nif (typeof encoded !== 'string' || !encoded) {\n  throw new Error('GitHub response does not contain file content');\n}\n\nconst content = Buffer\n  .from(encoded.replace(/\\s/g, ''), 'base64')\n  .toString('utf8');\n\nreturn {\n  json: {\n    name: $json.name,\n    path: $json.path,\n    sha: $json.sha,\n    content\n  }\n};"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        -160,
-        -48
-      ],
-      "id": "ade81c78-3510-4dbe-8fb0-1b2f244c930b",
-      "name": "Decode GitHub Content"
-    }
-  ],
-  "connections": {
-    "When Executed by Another Workflow": {
-      "main": [
-        [
-          {
-            "node": "Get a file",
-            "type": "main",
-            "index": 0
+    "settings": {
+      "executionOrder": "v1",
+      "binaryMode": "separate",
+      "availableInMCP": false
+    },
+    "staticData": null,
+    "meta": {
+      "templateCredsSetupCompleted": true
+    },
+    "nodeGroups": [],
+    "pinData": {
+      "When Executed by Another Workflow": [
+        {
+          "json": {
+            "path": "docs/CURRENT_STATE.md"
           }
-        ]
+        }
       ]
     },
-    "Get a file": {
-      "main": [
-        [
-          {
-            "node": "Decode GitHub Content",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    }
-  },
-  "settings": {
-    "executionOrder": "v1",
-    "binaryMode": "separate",
-    "availableInMCP": false
-  },
-  "staticData": null,
-  "meta": {
-    "templateCredsSetupCompleted": true
-  },
-  "nodeGroups": [],
-  "pinData": {},
-  "activeVersionId": "11c32f55-623e-4106-acce-3ac4867a7ad3",
-  "versionCounter": 15,
-  "triggerCount": 0,
-  "sourceWorkflowId": null,
-  "tags": [],
-  "shared": [
-    {
-      "updatedAt": "2026-09-02T18:56:19.974Z",
-      "createdAt": "2026-09-02T18:56:19.974Z",
-      "role": "workflow:owner",
-      "workflowId": "FLsgn6x0wzoDCsNf",
-      "projectId": "x92yC4agLVaxmmyf",
-      "project": {
-        "updatedAt": "2026-08-22T20:38:05.582Z",
-        "createdAt": "2026-08-22T18:46:49.400Z",
-        "id": "x92yC4agLVaxmmyf",
-        "name": "Vitalii Pokhyl <pokhylvitalii@gmail.com>",
-        "type": "personal",
-        "icon": null,
-        "description": null,
-        "customTelemetryTags": [],
-        "creatorId": "beb98494-dbaf-489c-9de8-6abf234326a4"
+    "versionId": "9b37163d-1fed-4f30-b67b-e02f482f56db",
+    "activeVersionId": "9b37163d-1fed-4f30-b67b-e02f482f56db",
+    "versionCounter": 25,
+    "triggerCount": 0,
+    "sourceWorkflowId": null,
+    "tags": [],
+    "shared": [
+      {
+        "updatedAt": "2026-09-02T18:56:19.974Z",
+        "createdAt": "2026-09-02T18:56:19.974Z",
+        "role": "workflow:owner",
+        "workflowId": "FLsgn6x0wzoDCsNf",
+        "projectId": "x92yC4agLVaxmmyf",
+        "project": {
+          "updatedAt": "2026-08-22T20:38:05.582Z",
+          "createdAt": "2026-08-22T18:46:49.400Z",
+          "id": "x92yC4agLVaxmmyf",
+          "name": "Vitalii Pokhyl <pokhylvitalii@gmail.com>",
+          "type": "personal",
+          "icon": null,
+          "description": null,
+          "customTelemetryTags": [],
+          "creatorId": "beb98494-dbaf-489c-9de8-6abf234326a4"
+        }
       }
+    ],
+    "versionMetadata": {
+      "name": "Version 9b37163d",
+      "description": ""
     }
-  ],
-  "versionMetadata": {
-    "name": "Version 11c32f55",
-    "description": ""
   }
-}
+]
