@@ -2,7 +2,7 @@
 
 ## M0 — Foundation
 
-Status: in progress.
+Status: complete.
 
 - [x] MCP endpoint deployed in n8n
 - [x] OAuth2 authentication for MCP client
@@ -12,7 +12,7 @@ Status: in progress.
 - [x] Gmail search + full body tool
 - [x] Export working workflows to dedicated project repository
 - [x] Create architecture/security/tool documentation
-- [ ] Publish dedicated GitHub repository
+- [x] Publish dedicated GitHub repository
 
 ## M1 — Production cleanup
 
