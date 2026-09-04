@@ -1,174 +1,321 @@
-{
-  "name": "MCP — Gmail Search",
-  "description": null,
-  "isArchived": false,
-  "nodes": [
-    {
-      "parameters": {
-        "workflowInputs": {
-          "values": [
-            {
-              "name": "query"
+[
+  {
+    "updatedAt": "2026-09-04T14:54:18.221Z",
+    "createdAt": "2026-09-03T19:33:25.856Z",
+    "id": "tUxRIiXHh2UaWflF",
+    "name": "MCP — Gmail Search",
+    "description": null,
+    "active": true,
+    "isArchived": false,
+    "nodes": [
+      {
+        "parameters": {
+          "workflowInputs": {
+            "values": [
+              {
+                "name": "query"
+              },
+              {
+                "name": "limit",
+                "type": "number"
+              }
+            ]
+          }
+        },
+        "type": "n8n-nodes-base.executeWorkflowTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          -400,
+          -32
+        ],
+        "id": "d7869e2a-d0a9-4fcf-8e9a-d61fb7884c13",
+        "name": "When Executed by Another Workflow"
+      },
+      {
+        "parameters": {
+          "operation": "getAll",
+          "limit": "={{$json.limit}}",
+          "filters": {}
+        },
+        "type": "n8n-nodes-base.gmail",
+        "typeVersion": 2.2,
+        "position": [
+          304,
+          -128
+        ],
+        "id": "abc2cb1b-2f91-444e-873e-cae86de2012a",
+        "name": "Get many messages",
+        "webhookId": "f5591731-77e9-451c-82a8-5f202c71fcb2",
+        "credentials": {
+          "gmailOAuth2": {
+            "id": "FJ3qlbs3RFMHmomW",
+            "name": "Gmail account"
+          }
+        },
+        "onError": "continueErrorOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "return items.map(item => {\n  const j = item.json;\n\n  return {\n    json: {\n      id: j.id ?? null,\n      threadId: j.threadId ?? null,\n      from: j.from?.text ?? null,\n      to: j.to?.text ?? null,\n      subject: j.subject ?? null,\n      date: j.date ?? null,\n      body: j.text ?? null\n    }\n  };\n});"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          784,
+          -320
+        ],
+        "id": "b199a95d-7dd2-4288-bad0-9415cb085435",
+        "name": "Format email results"
+      },
+      {
+        "parameters": {
+          "operation": "get",
+          "messageId": "={{$json.id}}",
+          "simple": false,
+          "options": {}
+        },
+        "type": "n8n-nodes-base.gmail",
+        "typeVersion": 2.2,
+        "position": [
+          544,
+          -208
+        ],
+        "id": "1ae4481d-62e1-4528-a061-52fc725e2ded",
+        "name": "Get a message",
+        "webhookId": "8cd73b85-359b-4816-ba4c-f0b300922fa9",
+        "credentials": {
+          "gmailOAuth2": {
+            "id": "FJ3qlbs3RFMHmomW",
+            "name": "Gmail account"
+          }
+        },
+        "onError": "continueErrorOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "const data = items.map(item => item.json);\n\nreturn [\n  {\n    json: {\n      success: true,\n      data,\n      meta: {\n        tool: 'search_emails',\n        count: data.length\n      }\n    }\n  }\n];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          976,
+          -320
+        ],
+        "id": "ff086c29-afc9-466d-ac1e-1d7ff5aa12d5",
+        "name": "Format MCP response"
+      },
+      {
+        "parameters": {
+          "jsCode": "const input = items[0]?.json ?? {};\n\nconst query =\n  typeof input.query === 'string'\n    ? input.query.trim()\n    : '';\n\nconst hasLimit =\n  input.limit !== undefined &&\n  input.limit !== null &&\n  input.limit !== '';\n\nconst limit = hasLimit\n  ? Number(input.limit)\n  : 5;\n\nconst inputValid =\n  query.length > 0 &&\n  Number.isInteger(limit) &&\n  limit >= 1 &&\n  limit <= 50;\n\nreturn [\n  {\n    json: {\n      ...input,\n      query,\n      limit,\n      input_valid: inputValid\n    }\n  }\n];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -176,
+          -32
+        ],
+        "id": "92f5ec68-c90d-404a-87a7-d407dd7135a7",
+        "name": "Validate input"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 3
             },
+            "conditions": [
+              {
+                "id": "7856264e-b722-45d0-bf3b-070b816fbe90",
+                "leftValue": "={{$json.input_valid}}",
+                "rightValue": "",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          48,
+          -32
+        ],
+        "id": "83bdeda8-95dd-4447-997e-23a344ae351b",
+        "name": "Is input valid?"
+      },
+      {
+        "parameters": {
+          "jsCode": "return [\n  {\n    json: {\n      success: false,\n      error: {\n        code: 'INVALID_INPUT',\n        message: 'query must be a non-empty string and limit must be an integer between 1 and 50'\n      },\n      meta: {\n        tool: 'search_emails',\n        count: 0\n      }\n    }\n  }\n];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          288,
+          128
+        ],
+        "id": "795ff42e-5262-493f-9e32-2e4d751eaf85",
+        "name": "Format invalid input error"
+      },
+      {
+        "parameters": {
+          "jsCode": "return [\n  {\n    json: {\n      success: false,\n      error: {\n        code: 'UPSTREAM_ERROR',\n        message: 'Gmail request failed'\n      },\n      meta: {\n        tool: 'search_emails',\n        count: 0\n      }\n    }\n  }\n];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          784,
+          -112
+        ],
+        "id": "c7543149-008a-40fe-a03a-abcacf28a2a5",
+        "name": "Format Gmail error"
+      }
+    ],
+    "connections": {
+      "When Executed by Another Workflow": {
+        "main": [
+          [
             {
-              "name": "limit",
-              "type": "number"
+              "node": "Validate input",
+              "type": "main",
+              "index": 0
             }
           ]
-        }
+        ]
       },
-      "type": "n8n-nodes-base.executeWorkflowTrigger",
-      "typeVersion": 1.2,
-      "position": [
-        -400,
-        -32
-      ],
-      "id": "d7869e2a-d0a9-4fcf-8e9a-d61fb7884c13",
-      "name": "When Executed by Another Workflow"
-    },
-    {
-      "parameters": {
-        "operation": "getAll",
-        "limit": "={{$json.limit}}",
-        "filters": {
-          "q": "={{$json.query}}"
-        }
+      "Get many messages": {
+        "main": [
+          [
+            {
+              "node": "Get a message",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Format Gmail error",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       },
-      "type": "n8n-nodes-base.gmail",
-      "typeVersion": 2.2,
-      "position": [
-        -176,
-        -32
-      ],
-      "id": "abc2cb1b-2f91-444e-873e-cae86de2012a",
-      "name": "Get many messages",
-      "webhookId": "f5591731-77e9-451c-82a8-5f202c71fcb2",
-      "credentials": {
-        "gmailOAuth2": {
-          "id": "FJ3qlbs3RFMHmomW",
-          "name": "Gmail account"
-        }
+      "Get a message": {
+        "main": [
+          [
+            {
+              "node": "Format email results",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Format Gmail error",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Format email results": {
+        "main": [
+          [
+            {
+              "node": "Format MCP response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Validate input": {
+        "main": [
+          [
+            {
+              "node": "Is input valid?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Is input valid?": {
+        "main": [
+          [
+            {
+              "node": "Get many messages",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Format invalid input error",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       }
     },
-    {
-      "parameters": {
-        "jsCode": "return items.map(item => {\n  const j = item.json;\n\n  return {\n    json: {\n      id: j.id ?? null,\n      threadId: j.threadId ?? null,\n      from: j.from?.text ?? null,\n      to: j.to?.text ?? null,\n      subject: j.subject ?? null,\n      date: j.date ?? null,\n      body: j.text ?? null\n    }\n  };\n});"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        272,
-        -32
-      ],
-      "id": "b199a95d-7dd2-4288-bad0-9415cb085435",
-      "name": "Format email results"
+    "settings": {
+      "executionOrder": "v1",
+      "binaryMode": "separate",
+      "availableInMCP": false
     },
-    {
-      "parameters": {
-        "operation": "get",
-        "messageId": "={{$json.id}}",
-        "simple": false,
-        "options": {}
-      },
-      "type": "n8n-nodes-base.gmail",
-      "typeVersion": 2.2,
-      "position": [
-        48,
-        -32
-      ],
-      "id": "1ae4481d-62e1-4528-a061-52fc725e2ded",
-      "name": "Get a message",
-      "webhookId": "8cd73b85-359b-4816-ba4c-f0b300922fa9",
-      "credentials": {
-        "gmailOAuth2": {
-          "id": "FJ3qlbs3RFMHmomW",
-          "name": "Gmail account"
+    "staticData": null,
+    "meta": {
+      "templateCredsSetupCompleted": true
+    },
+    "nodeGroups": [],
+    "pinData": {
+      "When Executed by Another Workflow": [
+        {
+          "json": {
+            "query": "",
+            "limit": 5
+          }
         }
-      }
-    }
-  ],
-  "connections": {
-    "When Executed by Another Workflow": {
-      "main": [
-        [
-          {
-            "node": "Get many messages",
-            "type": "main",
-            "index": 0
-          }
-        ]
       ]
     },
-    "Get many messages": {
-      "main": [
-        [
-          {
-            "node": "Get a message",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Get a message": {
-      "main": [
-        [
-          {
-            "node": "Format email results",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    }
-  },
-  "settings": {
-    "executionOrder": "v1",
-    "binaryMode": "separate",
-    "availableInMCP": false
-  },
-  "staticData": null,
-  "meta": {
-    "templateCredsSetupCompleted": true
-  },
-  "nodeGroups": [],
-  "pinData": {
-    "When Executed by Another Workflow": [
+    "versionId": "fb933d03-d419-423b-96d5-a96248ee11fb",
+    "activeVersionId": "fb933d03-d419-423b-96d5-a96248ee11fb",
+    "versionCounter": 54,
+    "triggerCount": 0,
+    "sourceWorkflowId": null,
+    "tags": [],
+    "shared": [
       {
-        "json": {
-          "query": "newer_than:7d",
-          "limit": 5
+        "updatedAt": "2026-09-03T19:33:25.856Z",
+        "createdAt": "2026-09-03T19:33:25.856Z",
+        "role": "workflow:owner",
+        "workflowId": "tUxRIiXHh2UaWflF",
+        "projectId": "x92yC4agLVaxmmyf",
+        "project": {
+          "updatedAt": "2026-08-22T20:38:05.582Z",
+          "createdAt": "2026-08-22T18:46:49.400Z",
+          "id": "x92yC4agLVaxmmyf",
+          "name": "Vitalii Pokhyl <pokhylvitalii@gmail.com>",
+          "type": "personal",
+          "icon": null,
+          "description": null,
+          "customTelemetryTags": [],
+          "creatorId": "beb98494-dbaf-489c-9de8-6abf234326a4"
         }
       }
-    ]
-  },
-  "activeVersionId": "dc411451-ef34-4f86-a8e5-55d8e0265a09",
-  "versionCounter": 20,
-  "triggerCount": 0,
-  "sourceWorkflowId": null,
-  "tags": [],
-  "shared": [
-    {
-      "updatedAt": "2026-09-03T19:33:25.856Z",
-      "createdAt": "2026-09-03T19:33:25.856Z",
-      "role": "workflow:owner",
-      "workflowId": "tUxRIiXHh2UaWflF",
-      "projectId": "x92yC4agLVaxmmyf",
-      "project": {
-        "updatedAt": "2026-08-22T20:38:05.582Z",
-        "createdAt": "2026-08-22T18:46:49.400Z",
-        "id": "x92yC4agLVaxmmyf",
-        "name": "Vitalii Pokhyl <pokhylvitalii@gmail.com>",
-        "type": "personal",
-        "icon": null,
-        "description": null,
-        "customTelemetryTags": [],
-        "creatorId": "beb98494-dbaf-489c-9de8-6abf234326a4"
-      }
+    ],
+    "versionMetadata": {
+      "name": "Version fb933d03",
+      "description": ""
     }
-  ],
-  "versionMetadata": {
-    "name": "Version dc411451",
-    "description": ""
   }
-}
+]
