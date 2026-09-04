@@ -1,110 +1,318 @@
-{
-  "name": "MCP — PostgreSQL Job Details",
-  "description": null,
-  "isArchived": false,
-  "nodes": [
-    {
-      "parameters": {
-        "workflowInputs": {
-          "values": [
+[
+  {
+    "updatedAt": "2026-09-04T13:51:09.302Z",
+    "createdAt": "2026-09-03T15:46:31.390Z",
+    "id": "kSWCbIsNogHB5YC3",
+    "name": "MCP — PostgreSQL Job Details",
+    "description": null,
+    "active": true,
+    "isArchived": false,
+    "nodes": [
+      {
+        "parameters": {
+          "workflowInputs": {
+            "values": [
+              {
+                "name": "job_id"
+              }
+            ]
+          }
+        },
+        "type": "n8n-nodes-base.executeWorkflowTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          -880,
+          -112
+        ],
+        "id": "133ddc6c-103d-4944-bbae-d79390e2ff20",
+        "name": "When Executed by Another Workflow"
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT\n  id,\n  topic,\n  language_code,\n  target_duration_seconds,\n  status,\n  current_stage,\n  last_error,\n  review_decision,\n  review_notes,\n  created_at,\n  updated_at\nFROM jobs\nWHERE id = $1::uuid\nLIMIT 1;",
+          "options": {
+            "queryReplacement": "={{$json.job_id}}"
+          }
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.7,
+        "position": [
+          -160,
+          -176
+        ],
+        "id": "3cd43895-2ec8-4808-9a6d-330d844bad1e",
+        "name": "Execute a SQL query",
+        "alwaysOutputData": true,
+        "credentials": {
+          "postgres": {
+            "id": "Zj9PZx7iF6uK469i",
+            "name": "mcp_read"
+          }
+        },
+        "onError": "continueErrorOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "const data = items.map(item => item.json);\n\nreturn [\n  {\n    json: {\n      success: true,\n      data: data[0] ?? null,\n      meta: {\n        tool: 'get_job_details',\n        count: data.length\n      }\n    }\n  }\n];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          304,
+          -256
+        ],
+        "id": "f758188b-1d8c-46e8-a2fa-980e9834a535",
+        "name": "Format MCP response"
+      },
+      {
+        "parameters": {
+          "jsCode": "const input = items[0]?.json ?? {};\nconst jobId = typeof input.job_id === 'string'\n  ? input.job_id.trim()\n  : '';\n\nconst isValidUuid =\n  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(jobId);\n\nreturn [\n  {\n    json: {\n      ...input,\n      job_id: jobId,\n      input_valid: isValidUuid\n    }\n  }\n];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -656,
+          -112
+        ],
+        "id": "d5e51ce1-3205-4bdf-a0d3-25c198a867c7",
+        "name": "Validate input"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 3
+            },
+            "conditions": [
+              {
+                "id": "ec0a2376-5c7f-4def-954c-646ccb8759ce",
+                "leftValue": "={{$json.input_valid}}",
+                "rightValue": "",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          -464,
+          -112
+        ],
+        "id": "43ae4283-a37b-4be2-82e5-bf8825d72a68",
+        "name": "Is input valid?",
+        "alwaysOutputData": true
+      },
+      {
+        "parameters": {
+          "jsCode": "const input = items[0]?.json ?? {};\n\nreturn [\n  {\n    json: {\n      success: false,\n      error: {\n        code: 'INVALID_INPUT',\n        message: 'job_id must be a valid UUID'\n      },\n      meta: {\n        tool: 'get_job_details',\n        count: 0\n      }\n    }\n  }\n];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -160,
+          -16
+        ],
+        "id": "f3dfbc03-07ae-4445-bbb9-4aec88a6f2bf",
+        "name": "Format invalid input error"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 3
+            },
+            "conditions": [
+              {
+                "id": "55335081-5bad-40d2-9841-3f7aefa102a2",
+                "leftValue": "={{ Object.keys($json).length > 0 }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          80,
+          -192
+        ],
+        "id": "31e00083-0e7e-4977-a666-a739c75713fa",
+        "name": "Job found?"
+      },
+      {
+        "parameters": {
+          "jsCode": "return [\n  {\n    json: {\n      success: false,\n      error: {\n        code: 'NOT_FOUND',\n        message: 'Job not found'\n      },\n      meta: {\n        tool: 'get_job_details',\n        count: 0\n      }\n    }\n  }\n];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          304,
+          -96
+        ],
+        "id": "7075fe4f-06e3-495c-ac2b-38fa50c7deeb",
+        "name": "Format not found error"
+      },
+      {
+        "parameters": {
+          "jsCode": "return [\n  {\n    json: {\n      success: false,\n      error: {\n        code: 'UPSTREAM_ERROR',\n        message: 'Database request failed'\n      },\n      meta: {\n        tool: 'get_job_details',\n        count: 0\n      }\n    }\n  }\n];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          80,
+          -16
+        ],
+        "id": "2827e28e-f8a1-4d42-aabd-3a33bfc50e24",
+        "name": "Format database error"
+      }
+    ],
+    "connections": {
+      "When Executed by Another Workflow": {
+        "main": [
+          [
             {
-              "name": "job_id"
+              "node": "Validate input",
+              "type": "main",
+              "index": 0
             }
           ]
-        }
-      },
-      "type": "n8n-nodes-base.executeWorkflowTrigger",
-      "typeVersion": 1.2,
-      "position": [
-        -560,
-        -80
-      ],
-      "id": "133ddc6c-103d-4944-bbae-d79390e2ff20",
-      "name": "When Executed by Another Workflow"
-    },
-    {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "SELECT\n  id,\n  topic,\n  language_code,\n  target_duration_seconds,\n  status,\n  current_stage,\n  last_error,\n  review_decision,\n  review_notes,\n  created_at,\n  updated_at\nFROM jobs\nWHERE id = $1::uuid\nLIMIT 1;",
-        "options": {
-          "queryReplacement": "={{$json.job_id}}"
-        }
-      },
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.7,
-      "position": [
-        -336,
-        -80
-      ],
-      "id": "3cd43895-2ec8-4808-9a6d-330d844bad1e",
-      "name": "Execute a SQL query",
-      "credentials": {
-        "postgres": {
-          "id": "Zj9PZx7iF6uK469i",
-          "name": "mcp_read"
-        }
-      }
-    }
-  ],
-  "connections": {
-    "When Executed by Another Workflow": {
-      "main": [
-        [
-          {
-            "node": "Execute a SQL query",
-            "type": "main",
-            "index": 0
-          }
         ]
+      },
+      "Execute a SQL query": {
+        "main": [
+          [
+            {
+              "node": "Job found?",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Format database error",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Validate input": {
+        "main": [
+          [
+            {
+              "node": "Is input valid?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Is input valid?": {
+        "main": [
+          [
+            {
+              "node": "Execute a SQL query",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Format invalid input error",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Job found?": {
+        "main": [
+          [
+            {
+              "node": "Format MCP response",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Format not found error",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1",
+      "binaryMode": "separate",
+      "availableInMCP": false
+    },
+    "staticData": null,
+    "meta": {
+      "templateCredsSetupCompleted": true
+    },
+    "nodeGroups": [],
+    "pinData": {
+      "When Executed by Another Workflow": [
+        {
+          "json": {
+            "job_id": "4372be34-c417-415f-92f6-63481b3b5686"
+          }
+        }
       ]
-    }
-  },
-  "settings": {
-    "executionOrder": "v1",
-    "binaryMode": "separate",
-    "availableInMCP": false
-  },
-  "staticData": null,
-  "meta": {
-    "templateCredsSetupCompleted": true
-  },
-  "nodeGroups": [],
-  "pinData": {
-    "When Executed by Another Workflow": [
+    },
+    "versionId": "afc91419-1d50-410e-acdd-d8737bd2c72e",
+    "activeVersionId": "afc91419-1d50-410e-acdd-d8737bd2c72e",
+    "versionCounter": 44,
+    "triggerCount": 0,
+    "sourceWorkflowId": null,
+    "tags": [],
+    "shared": [
       {
-        "json": {
-          "job_id": "4372be34-c417-415f-92f6-63481b3b5686"
+        "updatedAt": "2026-09-03T15:46:31.390Z",
+        "createdAt": "2026-09-03T15:46:31.390Z",
+        "role": "workflow:owner",
+        "workflowId": "kSWCbIsNogHB5YC3",
+        "projectId": "x92yC4agLVaxmmyf",
+        "project": {
+          "updatedAt": "2026-08-22T20:38:05.582Z",
+          "createdAt": "2026-08-22T18:46:49.400Z",
+          "id": "x92yC4agLVaxmmyf",
+          "name": "Vitalii Pokhyl <pokhylvitalii@gmail.com>",
+          "type": "personal",
+          "icon": null,
+          "description": null,
+          "customTelemetryTags": [],
+          "creatorId": "beb98494-dbaf-489c-9de8-6abf234326a4"
         }
       }
-    ]
-  },
-  "activeVersionId": "81b58fb6-1cba-4a31-8a7f-2b905ba0fbcd",
-  "versionCounter": 8,
-  "triggerCount": 0,
-  "sourceWorkflowId": null,
-  "tags": [],
-  "shared": [
-    {
-      "updatedAt": "2026-09-03T15:46:31.390Z",
-      "createdAt": "2026-09-03T15:46:31.390Z",
-      "role": "workflow:owner",
-      "workflowId": "kSWCbIsNogHB5YC3",
-      "projectId": "x92yC4agLVaxmmyf",
-      "project": {
-        "updatedAt": "2026-08-22T20:38:05.582Z",
-        "createdAt": "2026-08-22T18:46:49.400Z",
-        "id": "x92yC4agLVaxmmyf",
-        "name": "Vitalii Pokhyl <pokhylvitalii@gmail.com>",
-        "type": "personal",
-        "icon": null,
-        "description": null,
-        "customTelemetryTags": [],
-        "creatorId": "beb98494-dbaf-489c-9de8-6abf234326a4"
-      }
+    ],
+    "versionMetadata": {
+      "name": "Version afc91419",
+      "description": ""
     }
-  ],
-  "versionMetadata": {
-    "name": "Version 81b58fb6",
-    "description": ""
   }
-}
+]
