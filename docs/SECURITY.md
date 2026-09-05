@@ -65,7 +65,15 @@ Every production tool call should record:
 - execution duration
 - normalized error code
 
-Sensitive values should be redacted before audit storage.
+Sensitive values are redacted centrally inside `MCP — Audit Tool Call` before `arguments_json` is written to PostgreSQL.
+
+Current redaction rules:
+
+- keys that look like credentials or session material are recursively replaced with `[REDACTED]`, including password, secret, token, authorization, cookie, session, API-key and private-key style fields;
+- `search_emails.query` is always replaced with `[REDACTED]` because Gmail search strings can contain email addresses, names, subjects, or other private mailbox context;
+- non-sensitive operational arguments such as `limit`, repository `path`, and `job_id` remain available for troubleshooting.
+
+Historical raw Gmail search queries were backfilled with `database/migrations/002_redact_existing_email_audit_queries.sql`.
 
 ## Error model target
 
