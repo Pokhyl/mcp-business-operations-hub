@@ -16,25 +16,29 @@ Current production tool surface:
 - `get_recent_jobs`
 - `get_job_details`
 - `search_emails`
+- `get_email_attachment`
 
 Legacy tools `hello_world` and `get_person` have been removed from the deployed MCP server.
 
-## M1 status
+## Milestone status
 
-M1 — Production cleanup is complete.
+M1 — Production cleanup: complete.
 
-Completed items:
+M2 — Google Workspace expansion: in progress.
 
-- legacy tools removed;
-- normalized success/error envelopes deployed for all four read tools;
-- centralized audit logging deployed;
-- sensitive audit arguments redacted before storage;
-- historical raw Gmail audit queries backfilled;
-- production acceptance evidence and regression rules documented in `docs/ACCEPTANCE_TESTS.md`.
+Completed M2 item:
+
+- `get_email_attachment`
+
+Next M2 item:
+
+- `search_drive_files`
+
+No write-capable behavior is exposed in M2.
 
 ## Normalized MCP contract
 
-All four current read tools return the same success envelope:
+Read tools use the common success envelope:
 
 ```json
 {
@@ -47,7 +51,7 @@ All four current read tools return the same success envelope:
 }
 ```
 
-Errors use the normalized envelope:
+Errors use:
 
 ```json
 {
@@ -63,25 +67,20 @@ Errors use the normalized envelope:
 }
 ```
 
-Current error codes used by the deployed read tools:
+Current normalized error codes include:
 
 - `INVALID_INPUT`
 - `NOT_FOUND`
+- `AMBIGUOUS_ATTACHMENT`
 - `UPSTREAM_ERROR`
 
 ## Centralized audit logging
 
-Centralized audit logging is deployed.
+Audit workflow: `MCP — Audit Tool Call`
 
-Audit workflow:
+Audit table: `mcp_tool_calls`
 
-`MCP — Audit Tool Call`
-
-Audit table:
-
-`mcp_tool_calls`
-
-Each audited tool follows the same lifecycle after input validation:
+Lifecycle for valid audited calls:
 
 ```text
 Validate input
@@ -92,86 +91,17 @@ Validate input
  -> Return original MCP response
 ```
 
-`Audit start` inserts one row with:
+`Audit start` stores sanitized arguments and returns `audit_id` plus `started_at`. `Audit finish` finalizes the same row with `succeeded|failed`, normalized error data, duration, and completion timestamp.
 
-- `tool_name`
-- sanitized `arguments_json`
-- `status = started`
-- `client_name`
-- optional `request_id`
-- `started_at`
+`INVALID_INPUT` remains before `Audit start` and therefore does not create an audit row.
 
-It returns `audit_id` and `started_at`.
+Sensitive-argument sanitization remains centralized in `MCP — Audit Tool Call`. Gmail search queries are always stored as `[REDACTED]`; credential/session-style keys are recursively redacted. Historical raw Gmail-query audit values were backfilled by `database/migrations/002_redact_existing_email_audit_queries.sql`.
 
-`Audit finish` updates the same row with:
+All finish-audit subworkflow calls omit `arguments_json`; only audit start writes call arguments.
 
-- `status = succeeded|failed`
-- `error_code`
-- `error_message`
-- `duration_ms`
-- `completed_at`
+## Gmail
 
-Input-validation failures are currently returned before `Audit start` and therefore are not written to the audit table.
-
-Current audited tools:
-
-- `get_github_file`
-- `get_recent_jobs`
-- `get_job_details`
-- `search_emails`
-
-Production audit regression evidence was observed for:
-
-- `get_github_file` success with `docs/CURRENT_STATE.md`
-- `get_github_file` `NOT_FOUND` with `docs/THIS_FILE_DOES_NOT_EXIST.md`
-- `get_recent_jobs` success with `limit: 5`
-- `get_job_details` success with job `4372be34-c417-415f-92f6-63481b3b5686`
-- `get_job_details` `NOT_FOUND` with a valid UUID that has no row
-- `search_emails` success with `query: newer_than:7d`, `limit: 5`
-
-Audit rows were verified in PostgreSQL with the expected tool name, sanitized arguments, status, duration, and error code where applicable.
-
-### Audit argument redaction
-
-Sensitive-argument redaction is deployed centrally inside `MCP — Audit Tool Call`, before `arguments_json` reaches PostgreSQL.
-
-The sanitizer:
-
-- recursively replaces credential/session-style keys with `[REDACTED]`, including password, secret, token, authorization, cookie, session, API-key and private-key style fields;
-- always replaces `search_emails.query` with `[REDACTED]` because a Gmail search query can contain private mailbox context;
-- preserves non-sensitive operational fields such as `limit`, repository `path`, and `job_id`.
-
-A production Gmail regression after deployment returned the normal five-email success envelope while the corresponding audit row stored:
-
-```json
-{
-  "limit": 5,
-  "query": "[REDACTED]"
-}
-```
-
-Historical raw Gmail audit queries were backfilled by `database/migrations/002_redact_existing_email_audit_queries.sql`. The migration updated two existing rows; a post-migration database check returned zero remaining unredacted `search_emails.query` audit values.
-
-## Acceptance tests
-
-The production acceptance record is:
-
-`docs/ACCEPTANCE_TESTS.md`
-
-It documents actual verified cases for all four current tools, including:
-
-- normalized success envelopes;
-- safe validation failures;
-- GitHub and Job Details `NOT_FOUND` paths;
-- audit success/failure finalization;
-- Gmail audit-query redaction;
-- regression rules for future tool changes.
-
-Provider/database `UPSTREAM_ERROR` branches are documented but are not deliberately forced by corrupting working production credentials, SQL, or provider configuration. They remain wired to normalized errors and `Audit failed`.
-
-## Implemented sub-workflows
-
-### Gmail
+### `search_emails`
 
 Workflow: `MCP — Gmail Search`
 
@@ -180,7 +110,22 @@ Status: active.
 Inputs:
 
 - `query` — required non-empty Gmail search string
-- `limit` — optional integer, default `5`, allowed range `1..50`
+- `limit` — optional integer, default `5`, range `1..50`
+
+The Gmail search query is passed through `filters.q`. Output messages include `id`, `threadId`, `from`, `to`, `subject`, `date`, and `body`.
+
+### `get_email_attachment`
+
+Workflow: `MCP — Gmail Attachment`
+
+Status: active and exposed through `MCP — Server`.
+
+Public inputs:
+
+- `message_id` — required; normally obtained internally from `search_emails`
+- `filename` — optional exact or partial filename hint
+
+The user is never required to know or provide Gmail `attachmentId`.
 
 Current flow:
 
@@ -188,137 +133,112 @@ Current flow:
 When Executed by Another Workflow
  -> Validate input
  -> Is input valid?
-    -> false: Format invalid input error
+    -> false: INVALID_INPUT
     -> true: Audit start
-       -> Get many messages
-          -> Error: Format Gmail error
-          -> Success: Get a message
-             -> Error: Format Gmail error
-             -> Success: Format email results
-                -> Format MCP response
-                -> Audit success
-                -> Return MCP response
-       -> normalized Gmail error
-          -> Audit failed
-          -> Return MCP error
+       -> Get message metadata (Gmail format=full)
+          -> Error: normalized Gmail UPSTREAM_ERROR
+          -> Success: Find attachment
+             -> recursively traverse MIME parts
+             -> discover body.attachmentId internally
+             -> prefer explicit Content-Disposition: attachment parts
+             -> if one candidate: select automatically
+             -> if filename supplied: exact match, then partial match
+             -> if several candidates remain: AMBIGUOUS_ATTACHMENT + available filenames
+             -> if no candidate matches: NOT_FOUND
+             -> selected: Get attachment data
+                -> Error: normalized Gmail UPSTREAM_ERROR
+                -> Success: convert Gmail base64url to standard base64
+                   -> Format MCP response
+                   -> Audit success
+                   -> Return MCP response
 ```
 
-`Get many messages` passes both normalized inputs explicitly after the audit sub-workflow:
+Successful public output contains:
 
-- limit from `Validate input`
-- Gmail search query through `filters.q` from `Validate input`
+- `filename`
+- `mime_type`
+- `size`
+- `content_base64`
 
-This fixes the prior production defect where the Gmail node had `filters: {}` and therefore did not actually apply the requested search query.
+The internal Gmail `attachmentId` is not returned in the public success response.
 
-`Format email results` returns:
+Production end-to-end verification used a real Gmail message with one PNG attachment. The tool was called with only `message_id` and an empty filename. It automatically found the attachment, downloaded it, and returned:
 
-- `id`
-- `threadId`
-- `from`
-- `to`
-- `subject`
-- `date`
-- `body`
+- `success = true`
+- filename `paragon-fiskalny-PARKING1788567115966.png`
+- MIME type `image/png`
+- size `14376`
+- non-empty `content_base64`
 
-Invalid input returns `INVALID_INPUT`. Gmail-node failures are normalized to `UPSTREAM_ERROR` with `Gmail request failed`.
+The corresponding audit row finalized as `succeeded` with arguments containing `message_id` and `filename: null` and no public `attachment_id` argument.
 
-### GitHub
+## GitHub
 
 Workflow: `MCP — GitHub Read File`
 
 Status: active.
 
-Input:
+Input: repository-relative `path`.
 
-- `path` — repository-relative path
+Missing files normalize to `NOT_FOUND`; other provider failures use `UPSTREAM_ERROR`.
 
-The workflow performs `Audit start` before the GitHub request and `Audit success` / `Audit failed` after the normalized result.
-
-Because `Audit start` replaces the current item, `Get a file` reads `path` explicitly from the workflow trigger output.
-
-The GitHub node uses a separate Error output. A missing file is normalized to `NOT_FOUND`; other GitHub failures fall back to `UPSTREAM_ERROR`.
-
-Verified missing-file case:
-
-- input: `docs/THIS_FILE_DOES_NOT_EXIST.md`
-- upstream message: `The resource you are requesting could not be found`
-- normalized code: `NOT_FOUND`
-
-Success regression was checked with `docs/CURRENT_STATE.md`.
-
-### PostgreSQL
+## PostgreSQL
 
 Workflow: `MCP — PostgreSQL Recent Jobs`
 
 Status: active.
 
-Input:
-
-- `limit` — optional integer, default `10`, allowed range `1..50`
-
-Invalid input is rejected before PostgreSQL with `INVALID_INPUT`. Valid calls are audited before the query and finalized after the normalized result. The SQL query reads `limit` explicitly from `Validate input` because `Audit start` replaces the current item.
-
-Database failures are normalized to `UPSTREAM_ERROR`. Success regression with `limit: 5` was completed after audit integration.
+Input: optional `limit`, default `10`, range `1..50`.
 
 Workflow: `MCP — PostgreSQL Job Details`
 
 Status: active.
 
-Input:
+Input: UUID `job_id`.
 
-- `job_id` — UUID string
+Zero-row results normalize to `NOT_FOUND`. Database failures normalize to `UPSTREAM_ERROR`.
 
-UUID validation happens before PostgreSQL. Valid calls are audited before the query. The SQL query reads `job_id` explicitly from `Validate input` after `Audit start`.
+## Acceptance tests
 
-Zero-row results are handled separately and return `NOT_FOUND`; the same audit row is finalized with `status = failed` and `error_code = NOT_FOUND`. Database failures return `UPSTREAM_ERROR` and are wired to the same centralized audit finish workflow.
+Production acceptance evidence and regression rules are documented in:
 
-Verified success job:
+`docs/ACCEPTANCE_TESTS.md`
 
-`4372be34-c417-415f-92f6-63481b3b5686`
+Provider/database error branches are not deliberately forced by breaking working production credentials or SQL.
 
 ## Repository export state
 
-The current deployed workflow versions are exported to this repository:
+Current deployed workflow exports:
 
 - `n8n/MCP_SERVER.json`
 - `n8n/AUDIT_TOOL_CALL.json`
 - `n8n/github/GET_GITHUB_FILE.json`
 - `n8n/gmail/SEARCH_EMAILS.json`
+- `n8n/gmail/GET_EMAIL_ATTACHMENT.json`
 - `n8n/postgres/GET_RECENT_JOBS.json`
 - `n8n/postgres/GET_JOB_DETAILS.json`
 
-Audit database migrations:
+Audit migrations:
 
 - `database/migrations/001_mcp_tool_audit.sql`
 - `database/migrations/002_redact_existing_email_audit_queries.sql`
 
-Documentation:
-
-- `docs/ACCEPTANCE_TESTS.md`
-
-The exports reference n8n credentials by credential metadata only; no plaintext credential values were intentionally added to the repository.
+The exports reference n8n credentials by credential metadata only; no plaintext credential values are intentionally stored in the repository.
 
 ## Security state
 
-- Gmail credential is stored in n8n credentials storage.
-- GitHub credential is stored in n8n credentials storage.
+- Gmail and GitHub credentials remain in n8n credential storage.
 - PostgreSQL business-read tools use the read-only `mcp_read` credential.
-- The centralized audit workflow uses the separate write-capable application PostgreSQL credential only for `mcp_tool_calls` writes.
-- No write-capable business tool is exposed through MCP yet.
-- Centralized audit logging is active for all four current read tools.
-- Sensitive audit arguments are redacted centrally before storage.
-- Historical raw Gmail query audit values have been backfilled.
+- The centralized audit workflow uses the write-capable application PostgreSQL credential only for `mcp_tool_calls` writes.
+- No write-capable business tool is exposed through MCP.
+- Sensitive audit arguments are sanitized centrally.
+- Gmail `attachmentId` remains an internal implementation detail and is not required from the user.
 
 ## Exact next milestone
 
-M2 — Google Workspace expansion.
+Continue M2 with:
 
-Planned tools:
-
-1. `get_email_attachment`
-2. `search_drive_files`
-3. `read_drive_file`
-4. `get_calendar_events`
-5. `find_free_time`
-
-Do not add write-capable behavior while implementing M2 read tools.
+1. `search_drive_files`
+2. `read_drive_file`
+3. `get_calendar_events`
+4. `find_free_time`
