@@ -21,11 +21,13 @@ Status: in progress.
 - [x] Remove `hello_world`
 - [x] Remove `get_person`
 - [x] Add normalized tool response/error envelope
-- [ ] Add centralized audit logging
+- [x] Add centralized audit logging
 - [ ] Redact sensitive audit arguments
 - [ ] Add documented acceptance tests for all current tools
 
-Manual regression/error-path checks have been completed for the current read tools, but the dedicated acceptance-test documentation is still pending.
+Centralized audit logging is now deployed through `MCP — Audit Tool Call` and wired into all four current read tools. Success regressions were rerun after integration; GitHub and Job Details `NOT_FOUND` paths were also rechecked with audit finalization.
+
+The dedicated acceptance-test documentation is still pending.
 
 ## M2 — Google Workspace expansion
 
