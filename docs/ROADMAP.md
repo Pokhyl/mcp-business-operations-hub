@@ -25,19 +25,21 @@ Status: complete.
 - [x] Redact sensitive audit arguments
 - [x] Add documented acceptance tests for all current tools
 
-Centralized audit logging is deployed through `MCP — Audit Tool Call` and wired into all four current read tools.
+Centralized audit logging is deployed through `MCP — Audit Tool Call` and wired into the current read tools.
 
 Audit argument redaction is centralized before PostgreSQL storage. Gmail search queries are always redacted, credential/session-style argument keys are recursively redacted, and historical raw Gmail audit queries were backfilled with migration `002_redact_existing_email_audit_queries.sql`.
 
-Production acceptance evidence and regression rules are documented in `docs/ACCEPTANCE_TESTS.md`. Safe success, validation, `NOT_FOUND`, audit-finalization, and Gmail-redaction paths are recorded there. Provider/database failure branches are documented without deliberately breaking production credentials or SQL merely to force failures.
+Production acceptance evidence and regression rules are documented in `docs/ACCEPTANCE_TESTS.md`.
 
 ## M2 — Google Workspace expansion
 
-- [ ] `get_email_attachment`
+- [x] `get_email_attachment`
 - [ ] `search_drive_files`
 - [ ] `read_drive_file`
 - [ ] `get_calendar_events`
 - [ ] `find_free_time`
+
+`get_email_attachment` is deployed as a read-only MCP tool. The public contract is `message_id` plus optional `filename`; Gmail `attachmentId` is discovered internally and is never required from the user. A single attachment is selected automatically. If several attachments are present, the tool returns available filenames so the agent can retry with `filename`.
 
 ## M3 — CRM integration
 
