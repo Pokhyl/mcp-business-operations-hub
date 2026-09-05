@@ -16,20 +16,20 @@ Status: complete.
 
 ## M1 — Production cleanup
 
-Status: in progress.
+Status: complete.
 
 - [x] Remove `hello_world`
 - [x] Remove `get_person`
 - [x] Add normalized tool response/error envelope
 - [x] Add centralized audit logging
 - [x] Redact sensitive audit arguments
-- [ ] Add documented acceptance tests for all current tools
+- [x] Add documented acceptance tests for all current tools
 
 Centralized audit logging is deployed through `MCP — Audit Tool Call` and wired into all four current read tools.
 
-Audit argument redaction is now centralized before PostgreSQL storage. Gmail search queries are always redacted, credential/session-style argument keys are recursively redacted, and historical raw Gmail audit queries were backfilled with migration `002_redact_existing_email_audit_queries.sql`.
+Audit argument redaction is centralized before PostgreSQL storage. Gmail search queries are always redacted, credential/session-style argument keys are recursively redacted, and historical raw Gmail audit queries were backfilled with migration `002_redact_existing_email_audit_queries.sql`.
 
-The dedicated acceptance-test documentation is the remaining M1 item.
+Production acceptance evidence and regression rules are documented in `docs/ACCEPTANCE_TESTS.md`. Safe success, validation, `NOT_FOUND`, audit-finalization, and Gmail-redaction paths are recorded there. Provider/database failure branches are documented without deliberately breaking production credentials or SQL merely to force failures.
 
 ## M2 — Google Workspace expansion
 
