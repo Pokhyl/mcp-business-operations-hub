@@ -22,12 +22,14 @@ Status: in progress.
 - [x] Remove `get_person`
 - [x] Add normalized tool response/error envelope
 - [x] Add centralized audit logging
-- [ ] Redact sensitive audit arguments
+- [x] Redact sensitive audit arguments
 - [ ] Add documented acceptance tests for all current tools
 
-Centralized audit logging is now deployed through `MCP — Audit Tool Call` and wired into all four current read tools. Success regressions were rerun after integration; GitHub and Job Details `NOT_FOUND` paths were also rechecked with audit finalization.
+Centralized audit logging is deployed through `MCP — Audit Tool Call` and wired into all four current read tools.
 
-The dedicated acceptance-test documentation is still pending.
+Audit argument redaction is now centralized before PostgreSQL storage. Gmail search queries are always redacted, credential/session-style argument keys are recursively redacted, and historical raw Gmail audit queries were backfilled with migration `002_redact_existing_email_audit_queries.sql`.
+
+The dedicated acceptance-test documentation is the remaining M1 item.
 
 ## M2 — Google Workspace expansion
 
