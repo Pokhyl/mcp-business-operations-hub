@@ -2,7 +2,7 @@
 
 Last verified: 2026-09-05.
 
-This document is the acceptance-test record for the currently deployed read-only MCP tool surface.
+This document records production acceptance evidence for the deployed read-only MCP tool surface.
 
 Current tools:
 
@@ -10,8 +10,7 @@ Current tools:
 - `get_recent_jobs`
 - `get_job_details`
 - `search_emails`
-
-The purpose is to record actual production behavior and the exact regression checks that must remain true after future changes. It does not claim that destructive provider failures were induced when doing so would require breaking a working credential or database path.
+- `get_email_attachment`
 
 ## Common contract
 
@@ -51,194 +50,147 @@ For valid inputs that reach a provider/database operation:
 1. `Audit start` creates exactly one `mcp_tool_calls` row.
 2. The same row is finalized as `succeeded` or `failed`.
 3. `duration_ms` is populated on completion.
-4. The tool still returns the original normalized MCP response, not the audit sub-workflow response.
+4. The tool returns the original normalized business response, not the audit sub-workflow response.
 5. Sensitive arguments are sanitized before storage.
 
-Current design intentionally rejects `INVALID_INPUT` before `Audit start`, so validation failures do not create audit rows.
+`INVALID_INPUT` is rejected before `Audit start`, so validation failures do not create audit rows.
 
 ## Test matrix
 
 | ID | Tool | Case | Input | Expected result | Audit expectation | Status |
 | --- | --- | --- | --- | --- | --- | --- |
-| GH-01 | `get_github_file` | Existing file | `{"path":"docs/CURRENT_STATE.md"}` | `success=true`, `meta.tool=get_github_file`, `meta.count=1` | one finalized `succeeded` row with repository path | PASS |
-| GH-02 | `get_github_file` | Missing file | `{"path":"docs/THIS_FILE_DOES_NOT_EXIST.md"}` | `success=false`, `error.code=NOT_FOUND`, `meta.count=0` | same audit row finalized `failed`, `error_code=NOT_FOUND` | PASS |
-| RJ-01 | `get_recent_jobs` | Valid limit | `{"limit":5}` | `success=true`, five rows returned, `meta.tool=get_recent_jobs`, `meta.count=5` | finalized `succeeded` row with `{"limit":5}` | PASS |
-| RJ-02 | `get_recent_jobs` | Invalid limit | `{"limit":100}` | `success=false`, `error.code=INVALID_INPUT`, message states integer range `1..50` | no audit row because validation fails before audit | PASS |
-| JD-01 | `get_job_details` | Existing job | `{"job_id":"4372be34-c417-415f-92f6-63481b3b5686"}` | `success=true`, returned job id matches input, `meta.count=1` | finalized `succeeded` row with the job UUID | PASS |
-| JD-02 | `get_job_details` | Invalid UUID | invalid UUID string | `success=false`, `error.code=INVALID_INPUT`, message `job_id must be a valid UUID` | no audit row because validation fails before audit | PASS |
-| JD-03 | `get_job_details` | Valid UUID with no row | `{"job_id":"00000000-0000-4000-8000-000000000000"}` | `success=false`, `error.code=NOT_FOUND`, message `Job not found` | same audit row finalized `failed`, `error_code=NOT_FOUND` | PASS |
-| GM-01 | `search_emails` | Valid Gmail search | `{"query":"newer_than:7d","limit":5}` | `success=true`, `meta.tool=search_emails`, `meta.count=5`; each item contains normalized mail fields | finalized `succeeded` row | PASS |
-| GM-02 | `search_emails` | Invalid input | empty query and/or limit outside `1..50` | `success=false`, `error.code=INVALID_INPUT` | no audit row because validation fails before audit | PASS |
-| GM-03 | `search_emails` | Audit redaction | valid Gmail search | normal success response is preserved | stored `arguments_json.query` is `[REDACTED]` while `limit` remains visible | PASS |
+| GH-01 | `get_github_file` | Existing file | `{"path":"docs/CURRENT_STATE.md"}` | `success=true`, `meta.count=1` | finalized `succeeded` row | PASS |
+| GH-02 | `get_github_file` | Missing file | `{"path":"docs/THIS_FILE_DOES_NOT_EXIST.md"}` | `success=false`, `error.code=NOT_FOUND` | finalized `failed`, `error_code=NOT_FOUND` | PASS |
+| RJ-01 | `get_recent_jobs` | Valid limit | `{"limit":5}` | `success=true`, five rows | finalized `succeeded` row | PASS |
+| RJ-02 | `get_recent_jobs` | Invalid limit | `{"limit":100}` | `INVALID_INPUT` | no audit row | PASS |
+| JD-01 | `get_job_details` | Existing job | `{"job_id":"4372be34-c417-415f-92f6-63481b3b5686"}` | `success=true`, matching job id | finalized `succeeded` row | PASS |
+| JD-02 | `get_job_details` | Invalid UUID | invalid UUID string | `INVALID_INPUT` | no audit row | PASS |
+| JD-03 | `get_job_details` | Valid UUID with no row | `{"job_id":"00000000-0000-4000-8000-000000000000"}` | `NOT_FOUND` | finalized `failed`, `error_code=NOT_FOUND` | PASS |
+| GM-01 | `search_emails` | Valid Gmail search | `{"query":"newer_than:7d","limit":5}` | `success=true`, five normalized emails | finalized `succeeded` row | PASS |
+| GM-02 | `search_emails` | Invalid input | empty query and/or invalid limit | `INVALID_INPUT` | no audit row | PASS |
+| GM-03 | `search_emails` | Audit redaction | valid Gmail search | normal success preserved | stored query is `[REDACTED]` | PASS |
+| GA-01 | `get_email_attachment` | Automatic single attachment | valid `message_id`, `filename=""` | `success=true`, filename/MIME/size/base64 returned without public `attachment_id` | finalized `succeeded` row with `message_id` and `filename:null` | PASS |
+| GA-02 | `get_email_attachment` | Filename mismatch | valid `message_id`, nonexistent filename | `success=false`, `error.code=NOT_FOUND`, available attachment metadata returned | finalized `failed`, `error_code=NOT_FOUND` | PASS |
 
-## Verified production evidence
+## Verified Gmail attachment evidence
+
+The deployed `get_email_attachment` contract is:
+
+```json
+{
+  "message_id": "string",
+  "filename": "optional string"
+}
+```
+
+Gmail `attachmentId` is an internal implementation detail and is not required from the caller.
+
+### GA-01 — automatic selection and download
+
+A real Gmail message with one normal attachment was used. The workflow was called with the real `message_id` and an empty filename.
+
+Observed result:
+
+```json
+{
+  "success": true,
+  "data": {
+    "filename": "paragon-fiskalny-PARKING1788567115966.png",
+    "mime_type": "image/png",
+    "size": 14376,
+    "content_base64": "<non-empty base64>"
+  },
+  "meta": {
+    "tool": "get_email_attachment",
+    "count": 1
+  }
+}
+```
+
+The workflow recursively discovered the Gmail MIME attachment part, used the internal `body.attachmentId` to download it, and did not expose that ID in the public success response.
+
+The latest corresponding audit row was verified as:
+
+```text
+get_email_attachment | succeeded | duration_ms=765 | {"filename": null, "message_id": "1a06ee890111f46f"}
+```
+
+### GA-02 — safe filename mismatch
+
+The same valid message was called with a deliberately nonexistent filename hint.
+
+Observed normalized result:
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "NOT_FOUND",
+    "message": "No matching attachment found in message"
+  },
+  "data": {
+    "available_attachments": [
+      {
+        "filename": "paragon-fiskalny-PARKING1788567115966.png",
+        "mime_type": "image/png",
+        "size": 14376
+      }
+    ]
+  },
+  "meta": {
+    "tool": "get_email_attachment",
+    "count": 0
+  }
+}
+```
+
+This confirms the tool can expose safe attachment metadata for retry without exposing Gmail attachment IDs.
+
+`AMBIGUOUS_ATTACHMENT` is wired for messages with multiple candidate attachments. It returns available filenames for a retry with `filename`; this branch was not fabricated by altering a real mailbox message solely for testing.
+
+## Existing production evidence
 
 ### `get_github_file`
 
-Success was rerun against:
-
-```json
-{
-  "path": "docs/CURRENT_STATE.md"
-}
-```
-
-A real missing-file request was rerun against:
-
-```json
-{
-  "path": "docs/THIS_FILE_DOES_NOT_EXIST.md"
-}
-```
-
-The upstream GitHub message was:
-
-```text
-The resource you are requesting could not be found
-```
-
-The normalized MCP result was:
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "NOT_FOUND",
-    "message": "The resource you are requesting could not be found"
-  },
-  "meta": {
-    "tool": "get_github_file",
-    "count": 0
-  }
-}
-```
-
-The corresponding audit row finalized as `failed` with `error_code = NOT_FOUND`.
+Existing-file and safe missing-file cases are verified. Missing files normalize to `NOT_FOUND` and finalize the same audit row as failed.
 
 ### `get_recent_jobs`
 
-Production success regression was rerun with:
-
-```json
-{
-  "limit": 5
-}
-```
-
-The final MCP response still contained five jobs and:
-
-```json
-{
-  "tool": "get_recent_jobs",
-  "count": 5
-}
-```
-
-The corresponding audit row finalized as `succeeded` with:
-
-```json
-{
-  "limit": 5
-}
-```
-
-The invalid-limit contract was previously verified with `limit: 100` and remains before `Audit start` in the deployed flow.
+Success with `limit:5` returns five rows. Invalid `limit:100` is rejected before audit.
 
 ### `get_job_details`
 
-Success regression was rerun with:
-
-```json
-{
-  "job_id": "4372be34-c417-415f-92f6-63481b3b5686"
-}
-```
-
-The response returned the same id with `success=true` and `meta.count=1`, and the audit row finalized as `succeeded`.
-
-The safe `NOT_FOUND` case was rerun with:
-
-```json
-{
-  "job_id": "00000000-0000-4000-8000-000000000000"
-}
-```
-
-The final result was:
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "NOT_FOUND",
-    "message": "Job not found"
-  },
-  "meta": {
-    "tool": "get_job_details",
-    "count": 0
-  }
-}
-```
-
-The same audit row finalized as `failed` with `error_code = NOT_FOUND`.
-
-Invalid UUID validation was verified before PostgreSQL and returns `INVALID_INPUT` without creating an audit row.
+Success is verified for job `4372be34-c417-415f-92f6-63481b3b5686`. A valid UUID with no row returns `NOT_FOUND`; invalid UUIDs are rejected before PostgreSQL.
 
 ### `search_emails`
 
-Production success regression was rerun with:
-
-```json
-{
-  "query": "newer_than:7d",
-  "limit": 5
-}
-```
-
-The tool returned five normalized messages with the success envelope intact.
-
-After centralized redaction was deployed, the corresponding audit row stored:
-
-```json
-{
-  "limit": 5,
-  "query": "[REDACTED]"
-}
-```
-
-The Gmail query still reaches the Gmail node through `filters.q`; redaction applies only to the audit copy and does not alter the provider request.
-
-Invalid input remains rejected before Gmail and before audit with `INVALID_INPUT`.
+Success is verified with `{"query":"newer_than:7d","limit":5}`. The provider receives the real Gmail query through `filters.q`, while the audit copy stores `query: [REDACTED]`.
 
 ## Provider/database failure branches
 
-The deployed workflows also normalize provider/database failures to `UPSTREAM_ERROR`:
+Provider/database failures normalize to `UPSTREAM_ERROR`:
 
-- Gmail node errors -> `Gmail request failed`
-- PostgreSQL errors in `get_recent_jobs` -> `Database request failed`
-- PostgreSQL errors in `get_job_details` -> `Database request failed`
+- Gmail API/node errors -> `Gmail request failed`
+- PostgreSQL errors -> `Database request failed`
 - non-`NOT_FOUND` GitHub errors -> `UPSTREAM_ERROR`
 
-These branches are wired to `Audit failed` for valid audited calls. They must not be tested by deliberately corrupting production credentials, SQL, or provider configuration merely to force an error. A real provider failure, credential rotation, or maintenance event should be used as the next non-destructive opportunity to re-verify these branches.
+These branches must not be tested by deliberately corrupting working production credentials, SQL, or provider configuration.
 
 ## Historical audit cleanup
 
-Migration:
-
-`database/migrations/002_redact_existing_email_audit_queries.sql`
-
-was applied to historical `search_emails` audit rows. It updated two existing raw Gmail-query values. A post-migration query found zero remaining unredacted `search_emails.query` values.
+Migration `database/migrations/002_redact_existing_email_audit_queries.sql` was applied to historical `search_emails` audit rows. A post-migration check found zero remaining unredacted Gmail query values.
 
 ## Regression rule for future changes
 
-A change to any current MCP tool is not accepted until its applicable rows in this matrix are rerun.
+A current MCP tool is not accepted after a change until its applicable safe regression cases are rerun.
 
 At minimum:
 
-- input validation must remain before provider access;
-- normalized MCP envelopes must remain unchanged unless the contract is intentionally versioned;
-- one valid call must create and finalize one audit row;
-- audit integration must not replace or corrupt the returned business response;
-- Gmail search must still apply the requested query through `filters.q`;
-- sensitive audit values must remain redacted;
-- working success paths must not be deliberately broken just to test an error branch.
+- validation stays before provider access;
+- normalized envelopes remain stable unless intentionally versioned;
+- one valid provider call creates and finalizes one audit row;
+- audit integration does not replace the business response;
+- Gmail search still applies `filters.q`;
+- Gmail attachment retrieval never requires a user-supplied Gmail `attachmentId`;
+- sensitive audit values remain redacted;
+- working production credentials or SQL are not deliberately broken to force error tests.
