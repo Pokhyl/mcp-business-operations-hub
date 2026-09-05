@@ -1,5 +1,7 @@
 # MCP Tools
 
+Production acceptance cases and regression rules for the current tool surface are documented in `docs/ACCEPTANCE_TESTS.md`.
+
 ## `search_emails`
 
 Purpose: search Gmail and return full normalized message content for matching emails.
@@ -28,6 +30,8 @@ Output per message:
 ```
 
 Access: read-only.
+
+Audit note: the Gmail query is used for the provider request but stored as `[REDACTED]` in audit `arguments_json`.
 
 ## `get_github_file`
 
