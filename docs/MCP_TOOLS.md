@@ -33,6 +33,47 @@ Access: read-only.
 
 Audit note: the Gmail query is used for the provider request but stored as `[REDACTED]` in audit `arguments_json`.
 
+## `get_email_attachment`
+
+Purpose: retrieve an attachment from a Gmail message without requiring the caller or user to know Gmail's internal `attachmentId`.
+
+Inputs:
+
+```json
+{
+  "message_id": "string",
+  "filename": "optional string"
+}
+```
+
+`message_id` is normally obtained internally from `search_emails`.
+
+`filename` is optional. When the message has exactly one normal attachment, the tool selects it automatically. If multiple attachments exist, the tool returns their filenames, MIME types, and sizes so the agent can retry with an exact or partial `filename`.
+
+The workflow recursively traverses the Gmail MIME tree, discovers the real Gmail `body.attachmentId` internally, downloads the selected attachment through the Gmail API, converts Gmail base64url data to standard base64, and returns:
+
+```json
+{
+  "success": true,
+  "data": {
+    "filename": "invoice.pdf",
+    "mime_type": "application/pdf",
+    "size": 12345,
+    "content_base64": "..."
+  },
+  "meta": {
+    "tool": "get_email_attachment",
+    "count": 1
+  }
+}
+```
+
+The internal Gmail `attachmentId` is not part of the public MCP contract and is not returned in the success response.
+
+Possible normalized selection errors include `NOT_FOUND` and `AMBIGUOUS_ATTACHMENT`. Gmail API failures use `UPSTREAM_ERROR`.
+
+Access: read-only.
+
 ## `get_github_file`
 
 Purpose: read a text file from the configured GitHub repository.
@@ -78,10 +119,6 @@ Returned fields include status, current stage, last error, review fields, and ti
 Access: read-only PostgreSQL query.
 
 ## Planned tools
-
-### Gmail
-
-- `get_email_attachment(message_id, attachment_id)`
 
 ### Google Drive
 
