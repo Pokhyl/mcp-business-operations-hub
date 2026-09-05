@@ -82,7 +82,7 @@ Validate input
 `Audit start` inserts one row with:
 
 - `tool_name`
-- `arguments_json`
+- sanitized `arguments_json`
 - `status = started`
 - `client_name`
 - optional `request_id`
@@ -116,9 +116,28 @@ Production audit regression evidence was observed for:
 - `get_job_details` `NOT_FOUND` with a valid UUID that has no row
 - `search_emails` success with `query: newer_than:7d`, `limit: 5`
 
-Audit rows were verified in PostgreSQL with the expected tool name, arguments, status, duration, and error code where applicable.
+Audit rows were verified in PostgreSQL with the expected tool name, sanitized arguments, status, duration, and error code where applicable.
 
-Sensitive-argument redaction is not implemented yet. Current read-tool arguments are stored as supplied after normalization.
+### Audit argument redaction
+
+Sensitive-argument redaction is deployed centrally inside `MCP — Audit Tool Call`, before `arguments_json` reaches PostgreSQL.
+
+The sanitizer:
+
+- recursively replaces credential/session-style keys with `[REDACTED]`, including password, secret, token, authorization, cookie, session, API-key and private-key style fields;
+- always replaces `search_emails.query` with `[REDACTED]` because a Gmail search query can contain private mailbox context;
+- preserves non-sensitive operational fields such as `limit`, repository `path`, and `job_id`.
+
+A production Gmail regression after deployment returned the normal five-email success envelope while the corresponding audit row stored:
+
+```json
+{
+  "limit": 5,
+  "query": "[REDACTED]"
+}
+```
+
+Historical raw Gmail audit queries were backfilled by `database/migrations/002_redact_existing_email_audit_queries.sql`. The migration updated two existing rows; a post-migration database check returned zero remaining unredacted `search_emails.query` audit values.
 
 ## Implemented sub-workflows
 
@@ -154,7 +173,7 @@ When Executed by Another Workflow
           -> Return MCP error
 ```
 
-`Get many messages` now passes both normalized inputs explicitly after the audit sub-workflow:
+`Get many messages` passes both normalized inputs explicitly after the audit sub-workflow:
 
 - limit from `Validate input`
 - Gmail search query through `filters.q` from `Validate input`
@@ -183,7 +202,7 @@ Input:
 
 - `path` — repository-relative path
 
-The workflow now performs `Audit start` before the GitHub request and `Audit success` / `Audit failed` after the normalized result.
+The workflow performs `Audit start` before the GitHub request and `Audit success` / `Audit failed` after the normalized result.
 
 Because `Audit start` replaces the current item, `Get a file` reads `path` explicitly from the workflow trigger output.
 
@@ -207,7 +226,7 @@ Input:
 
 - `limit` — optional integer, default `10`, allowed range `1..50`
 
-Invalid input is rejected before PostgreSQL with `INVALID_INPUT`. Valid calls are audited before the query and finalized after the normalized result. The SQL query now reads `limit` explicitly from `Validate input` because `Audit start` replaces the current item.
+Invalid input is rejected before PostgreSQL with `INVALID_INPUT`. Valid calls are audited before the query and finalized after the normalized result. The SQL query reads `limit` explicitly from `Validate input` because `Audit start` replaces the current item.
 
 Database failures are normalized to `UPSTREAM_ERROR`. Success regression with `limit: 5` was completed after audit integration.
 
@@ -238,6 +257,11 @@ The current deployed workflow versions are exported to this repository:
 - `n8n/postgres/GET_RECENT_JOBS.json`
 - `n8n/postgres/GET_JOB_DETAILS.json`
 
+Audit database migrations:
+
+- `database/migrations/001_mcp_tool_audit.sql`
+- `database/migrations/002_redact_existing_email_audit_queries.sql`
+
 The exports reference n8n credentials by credential metadata only; no plaintext credential values were intentionally added to the repository.
 
 ## Security state
@@ -248,12 +272,12 @@ The exports reference n8n credentials by credential metadata only; no plaintext 
 - The centralized audit workflow uses the separate write-capable application PostgreSQL credential only for `mcp_tool_calls` writes.
 - No write-capable business tool is exposed through MCP yet.
 - Centralized audit logging is active for all four current read tools.
-- Sensitive audit-argument redaction is still pending.
+- Sensitive audit arguments are redacted centrally before storage.
+- Historical raw Gmail query audit values have been backfilled.
 
 ## Remaining M1 work
 
-1. Redact sensitive audit arguments.
-2. Add a dedicated documented acceptance-test set for all current tools.
+1. Add a dedicated documented acceptance-test set for all current tools.
 
 ## Later gaps
 
