@@ -1,6 +1,6 @@
 # Current State
 
-Last verified: 2026-09-04.
+Last verified: 2026-09-05.
 
 ## Deployed MCP gateway
 
@@ -56,6 +56,70 @@ Current error codes used by the deployed read tools:
 - `NOT_FOUND`
 - `UPSTREAM_ERROR`
 
+## Centralized audit logging
+
+Centralized audit logging is deployed.
+
+Audit workflow:
+
+`MCP — Audit Tool Call`
+
+Audit table:
+
+`mcp_tool_calls`
+
+Each audited tool follows the same lifecycle after input validation:
+
+```text
+Validate input
+ -> Audit start
+ -> Provider/database operation
+ -> Normalize success/error
+ -> Audit finish
+ -> Return original MCP response
+```
+
+`Audit start` inserts one row with:
+
+- `tool_name`
+- `arguments_json`
+- `status = started`
+- `client_name`
+- optional `request_id`
+- `started_at`
+
+It returns `audit_id` and `started_at`.
+
+`Audit finish` updates the same row with:
+
+- `status = succeeded|failed`
+- `error_code`
+- `error_message`
+- `duration_ms`
+- `completed_at`
+
+Input-validation failures are currently returned before `Audit start` and therefore are not written to the audit table.
+
+Current audited tools:
+
+- `get_github_file`
+- `get_recent_jobs`
+- `get_job_details`
+- `search_emails`
+
+Production audit regression evidence was observed for:
+
+- `get_github_file` success with `docs/CURRENT_STATE.md`
+- `get_github_file` `NOT_FOUND` with `docs/THIS_FILE_DOES_NOT_EXIST.md`
+- `get_recent_jobs` success with `limit: 5`
+- `get_job_details` success with job `4372be34-c417-415f-92f6-63481b3b5686`
+- `get_job_details` `NOT_FOUND` with a valid UUID that has no row
+- `search_emails` success with `query: newer_than:7d`, `limit: 5`
+
+Audit rows were verified in PostgreSQL with the expected tool name, arguments, status, duration, and error code where applicable.
+
+Sensitive-argument redaction is not implemented yet. Current read-tool arguments are stored as supplied after normalization.
+
 ## Implemented sub-workflows
 
 ### Gmail
@@ -76,13 +140,26 @@ When Executed by Another Workflow
  -> Validate input
  -> Is input valid?
     -> false: Format invalid input error
-    -> true: Get many messages
-       -> Error: Format Gmail error
-       -> Success: Get a message
+    -> true: Audit start
+       -> Get many messages
           -> Error: Format Gmail error
-          -> Success: Format email results
-             -> Format MCP response
+          -> Success: Get a message
+             -> Error: Format Gmail error
+             -> Success: Format email results
+                -> Format MCP response
+                -> Audit success
+                -> Return MCP response
+       -> normalized Gmail error
+          -> Audit failed
+          -> Return MCP error
 ```
+
+`Get many messages` now passes both normalized inputs explicitly after the audit sub-workflow:
+
+- limit from `Validate input`
+- Gmail search query through `filters.q` from `Validate input`
+
+This fixes the prior production defect where the Gmail node had `filters: {}` and therefore did not actually apply the requested search query.
 
 `Format email results` returns:
 
@@ -96,8 +173,6 @@ When Executed by Another Workflow
 
 Invalid input returns `INVALID_INPUT`. Gmail-node failures are normalized to `UPSTREAM_ERROR` with `Gmail request failed`.
 
-Manual invalid-input, error-route, and success regression checks were completed before the latest publish.
-
 ### GitHub
 
 Workflow: `MCP — GitHub Read File`
@@ -107,6 +182,10 @@ Status: active.
 Input:
 
 - `path` — repository-relative path
+
+The workflow now performs `Audit start` before the GitHub request and `Audit success` / `Audit failed` after the normalized result.
+
+Because `Audit start` replaces the current item, `Get a file` reads `path` explicitly from the workflow trigger output.
 
 The GitHub node uses a separate Error output. A missing file is normalized to `NOT_FOUND`; other GitHub failures fall back to `UPSTREAM_ERROR`.
 
@@ -128,7 +207,9 @@ Input:
 
 - `limit` — optional integer, default `10`, allowed range `1..50`
 
-Invalid input is rejected before PostgreSQL with `INVALID_INPUT`. Database failures are normalized to `UPSTREAM_ERROR`. Success regression with `limit: 5` was completed.
+Invalid input is rejected before PostgreSQL with `INVALID_INPUT`. Valid calls are audited before the query and finalized after the normalized result. The SQL query now reads `limit` explicitly from `Validate input` because `Audit start` replaces the current item.
+
+Database failures are normalized to `UPSTREAM_ERROR`. Success regression with `limit: 5` was completed after audit integration.
 
 Workflow: `MCP — PostgreSQL Job Details`
 
@@ -138,7 +219,9 @@ Input:
 
 - `job_id` — UUID string
 
-UUID validation happens before PostgreSQL. Zero-row results are handled separately and return `NOT_FOUND`. Database failures return `UPSTREAM_ERROR`.
+UUID validation happens before PostgreSQL. Valid calls are audited before the query. The SQL query reads `job_id` explicitly from `Validate input` after `Audit start`.
+
+Zero-row results are handled separately and return `NOT_FOUND`; the same audit row is finalized with `status = failed` and `error_code = NOT_FOUND`. Database failures return `UPSTREAM_ERROR` and are wired to the same centralized audit finish workflow.
 
 Verified success job:
 
@@ -146,29 +229,31 @@ Verified success job:
 
 ## Repository export state
 
-The current deployed versions of these workflows are exported to this repository:
+The current deployed workflow versions are exported to this repository:
 
 - `n8n/MCP_SERVER.json`
+- `n8n/AUDIT_TOOL_CALL.json`
 - `n8n/github/GET_GITHUB_FILE.json`
 - `n8n/gmail/SEARCH_EMAILS.json`
 - `n8n/postgres/GET_RECENT_JOBS.json`
 - `n8n/postgres/GET_JOB_DETAILS.json`
 
-The exports reference n8n credentials by credential metadata; no plaintext credential values were intentionally added to the repository.
+The exports reference n8n credentials by credential metadata only; no plaintext credential values were intentionally added to the repository.
 
 ## Security state
 
 - Gmail credential is stored in n8n credentials storage.
 - GitHub credential is stored in n8n credentials storage.
-- PostgreSQL MCP credential is read-only.
+- PostgreSQL business-read tools use the read-only `mcp_read` credential.
+- The centralized audit workflow uses the separate write-capable application PostgreSQL credential only for `mcp_tool_calls` writes.
 - No write-capable business tool is exposed through MCP yet.
-- Audit log schema is defined in this repository but is not yet wired into every tool invocation.
+- Centralized audit logging is active for all four current read tools.
+- Sensitive audit-argument redaction is still pending.
 
 ## Remaining M1 work
 
-1. Add centralized tool-call audit logging.
-2. Redact sensitive audit arguments.
-3. Add a dedicated documented acceptance-test set for all current tools.
+1. Redact sensitive audit arguments.
+2. Add a dedicated documented acceptance-test set for all current tools.
 
 ## Later gaps
 
