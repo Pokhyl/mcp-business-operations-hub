@@ -19,6 +19,19 @@ Current production tool surface:
 
 Legacy tools `hello_world` and `get_person` have been removed from the deployed MCP server.
 
+## M1 status
+
+M1 — Production cleanup is complete.
+
+Completed items:
+
+- legacy tools removed;
+- normalized success/error envelopes deployed for all four read tools;
+- centralized audit logging deployed;
+- sensitive audit arguments redacted before storage;
+- historical raw Gmail audit queries backfilled;
+- production acceptance evidence and regression rules documented in `docs/ACCEPTANCE_TESTS.md`.
+
 ## Normalized MCP contract
 
 All four current read tools return the same success envelope:
@@ -138,6 +151,23 @@ A production Gmail regression after deployment returned the normal five-email su
 ```
 
 Historical raw Gmail audit queries were backfilled by `database/migrations/002_redact_existing_email_audit_queries.sql`. The migration updated two existing rows; a post-migration database check returned zero remaining unredacted `search_emails.query` audit values.
+
+## Acceptance tests
+
+The production acceptance record is:
+
+`docs/ACCEPTANCE_TESTS.md`
+
+It documents actual verified cases for all four current tools, including:
+
+- normalized success envelopes;
+- safe validation failures;
+- GitHub and Job Details `NOT_FOUND` paths;
+- audit success/failure finalization;
+- Gmail audit-query redaction;
+- regression rules for future tool changes.
+
+Provider/database `UPSTREAM_ERROR` branches are documented but are not deliberately forced by corrupting working production credentials, SQL, or provider configuration. They remain wired to normalized errors and `Audit failed`.
 
 ## Implemented sub-workflows
 
@@ -262,6 +292,10 @@ Audit database migrations:
 - `database/migrations/001_mcp_tool_audit.sql`
 - `database/migrations/002_redact_existing_email_audit_queries.sql`
 
+Documentation:
+
+- `docs/ACCEPTANCE_TESTS.md`
+
 The exports reference n8n credentials by credential metadata only; no plaintext credential values were intentionally added to the repository.
 
 ## Security state
@@ -275,12 +309,16 @@ The exports reference n8n credentials by credential metadata only; no plaintext 
 - Sensitive audit arguments are redacted centrally before storage.
 - Historical raw Gmail query audit values have been backfilled.
 
-## Remaining M1 work
+## Exact next milestone
 
-1. Add a dedicated documented acceptance-test set for all current tools.
+M2 — Google Workspace expansion.
 
-## Later gaps
+Planned tools:
 
-1. Add Drive and Calendar read tools.
-2. Add Gmail attachment retrieval as a separate tool.
-3. Add write tools only behind explicit approval.
+1. `get_email_attachment`
+2. `search_drive_files`
+3. `read_drive_file`
+4. `get_calendar_events`
+5. `find_free_time`
+
+Do not add write-capable behavior while implementing M2 read tools.
