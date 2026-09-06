@@ -85,7 +85,7 @@ For valid inputs that reach a provider/database operation:
 | DR-06 | `read_drive_file` | Unsupported MOV | `UNSUPPORTED_FILE_TYPE` | PASS |
 | DR-07 | `read_drive_file` | Empty/invalid file ID | `INVALID_INPUT` | PASS |
 | DR-08 | `read_drive_file` | Nonexistent file ID | `NOT_FOUND` | PASS |
-| DR-09 | Drive cross-tool chain | natural prompt -> search -> read -> client summary | pending final rerun after latest publish | PENDING |
+| DR-09 | Drive cross-tool chain | natural prompt -> search -> read -> client summary | MCP client selects a real match, reads it, and summarizes content without user-provided file ID | PASS |
 
 ## Verified Gmail attachment evidence
 
@@ -246,6 +246,36 @@ Get file metadata
   }
 }
 ```
+
+Status: PASS.
+
+### DR-09 — natural cross-tool MCP acceptance
+
+Natural user prompt through Claude:
+
+```text
+Найди файл TikTok Video Pipeline в моём Google Drive и скажи, что в нём.
+```
+
+Observed behavior:
+
+1. The MCP client used `search_drive_files` and found two matching Google Sheets with the same visible name.
+2. It selected the more recently modified match automatically rather than asking the user for a Drive file ID.
+3. It called `read_drive_file` for that selected file.
+4. It summarized real sheet content, including the intake columns (`request_id`, `topic`, `language_code`, `start`, `status`, `job_id`, `correlation_id`, `error_message`, `created_at`, `updated_at`) and the one populated request row.
+5. The answer explicitly identified the sheet as an intake/queue for the TikTok video pipeline and distinguished the populated row from the remaining blank template rows.
+
+This verifies the intended production chain:
+
+```text
+natural user request
+ -> search_drive_files
+ -> select real Drive result
+ -> read_drive_file(file_id)
+ -> client summary
+```
+
+No Drive query syntax or file ID was supplied by the user.
 
 Status: PASS.
 
