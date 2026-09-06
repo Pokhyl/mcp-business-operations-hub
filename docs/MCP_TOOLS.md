@@ -15,19 +15,7 @@ Inputs:
 }
 ```
 
-Output per message:
-
-```json
-{
-  "id": "string",
-  "threadId": "string",
-  "from": "string|null",
-  "to": "string|null",
-  "subject": "string|null",
-  "date": "string|null",
-  "body": "string|null"
-}
-```
+Output per message includes `id`, `threadId`, `from`, `to`, `subject`, `date`, and `body`.
 
 Access: read-only.
 
@@ -48,31 +36,118 @@ Inputs:
 
 `message_id` is normally obtained internally from `search_emails`.
 
-`filename` is optional. When the message has exactly one normal attachment, the tool selects it automatically. If multiple attachments exist, the tool returns their filenames, MIME types, and sizes so the agent can retry with an exact or partial `filename`.
+`filename` is optional. When the message has exactly one normal attachment, the tool selects it automatically. If multiple attachments exist, the tool returns safe attachment metadata so the agent can retry with an exact or partial `filename`.
 
-The workflow recursively traverses the Gmail MIME tree, discovers the real Gmail `body.attachmentId` internally, downloads the selected attachment through the Gmail API, converts Gmail base64url data to standard base64, and returns:
+Successful output contains filename, MIME type, size, and `content_base64`. The internal Gmail `attachmentId` is never part of the public contract.
+
+Possible normalized selection errors include `NOT_FOUND` and `AMBIGUOUS_ATTACHMENT`. Gmail API failures use `UPSTREAM_ERROR`.
+
+Access: read-only.
+
+## `search_drive_files`
+
+Purpose: search the connected Google Drive by filename or full-text content.
+
+Inputs:
+
+```json
+{
+  "query": "string",
+  "limit": 10
+}
+```
+
+Rules:
+
+- `query` must be a non-empty natural search term.
+- `limit` defaults to `10` and must be an integer from `1` to `50`.
+- callers do not provide raw Google Drive query syntax; the workflow builds it internally.
+- trashed files are excluded.
+
+Successful output contains an array of normalized file metadata:
 
 ```json
 {
   "success": true,
-  "data": {
-    "filename": "invoice.pdf",
-    "mime_type": "application/pdf",
-    "size": 12345,
-    "content_base64": "..."
-  },
+  "data": [
+    {
+      "id": "drive-file-id",
+      "name": "example.pdf",
+      "mime_type": "application/pdf",
+      "modified_time": "2026-09-06T10:00:00.000Z",
+      "size": 12345,
+      "web_view_link": "...",
+      "parents": ["..."],
+      "drive_id": null
+    }
+  ],
   "meta": {
-    "tool": "get_email_attachment",
+    "tool": "search_drive_files",
     "count": 1
   }
 }
 ```
 
-The internal Gmail `attachmentId` is not part of the public MCP contract and is not returned in the success response.
+No matches are a successful empty result: `success=true`, `data=[]`, `count=0`.
 
-Possible normalized selection errors include `NOT_FOUND` and `AMBIGUOUS_ATTACHMENT`. Gmail API failures use `UPSTREAM_ERROR`.
+Invalid input uses `INVALID_INPUT`. Google Drive provider failures use `UPSTREAM_ERROR`.
 
-Access: read-only.
+Access: read-only through a dedicated OAuth credential with `https://www.googleapis.com/auth/drive.readonly`.
+
+## `read_drive_file`
+
+Purpose: read the textual contents of a Google Drive file by `file_id`, normally after `search_drive_files` finds the file.
+
+Input:
+
+```json
+{
+  "file_id": "string"
+}
+```
+
+Supported types:
+
+- Google Docs -> exported to `text/plain`
+- Google Sheets -> exported to `text/csv`
+- Google Slides -> exported to `text/plain`
+- PDF -> downloaded and text extracted
+- text-based files -> downloaded as text
+
+Successful output:
+
+```json
+{
+  "success": true,
+  "data": {
+    "file_id": "...",
+    "name": "...",
+    "mime_type": "...",
+    "modified_time": "...",
+    "size": 12345,
+    "web_view_link": "...",
+    "content_format": "text/plain",
+    "content": "...",
+    "truncated": false,
+    "original_content_length": 1234
+  },
+  "meta": {
+    "tool": "read_drive_file",
+    "count": 1
+  }
+}
+```
+
+Text is capped at `50000` characters. Truncation is explicitly reported through `truncated` and `original_content_length`.
+
+Errors:
+
+- empty `file_id` -> `INVALID_INPUT`
+- missing Drive file / provider 404 -> `NOT_FOUND`
+- unsupported binary type -> `UNSUPPORTED_FILE_TYPE`
+- other Google Drive failures -> `UPSTREAM_ERROR`
+
+Access: read-only through the dedicated Google Drive OAuth credential.
 
 ## `get_github_file`
 
@@ -119,11 +194,6 @@ Returned fields include status, current stage, last error, review fields, and ti
 Access: read-only PostgreSQL query.
 
 ## Planned tools
-
-### Google Drive
-
-- `search_drive_files(query, limit)`
-- `read_drive_file(file_id)`
 
 ### Google Calendar
 
