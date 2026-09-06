@@ -33,13 +33,21 @@ Production acceptance evidence and regression rules are documented in `docs/ACCE
 
 ## M2 — Google Workspace expansion
 
+Status: in progress.
+
 - [x] `get_email_attachment`
-- [ ] `search_drive_files`
-- [ ] `read_drive_file`
+- [x] `search_drive_files`
+- [x] `read_drive_file`
 - [ ] `get_calendar_events`
 - [ ] `find_free_time`
 
-`get_email_attachment` is deployed as a read-only MCP tool. The public contract is `message_id` plus optional `filename`; Gmail `attachmentId` is discovered internally and is never required from the user. A single attachment is selected automatically. If several attachments are present, the tool returns available filenames so the agent can retry with `filename`.
+`get_email_attachment` is deployed as a read-only MCP tool. The public contract is `message_id` plus optional `filename`; Gmail `attachmentId` is discovered internally and is never required from the user.
+
+`search_drive_files` is deployed with a dedicated Google Drive `drive.readonly` OAuth credential and supports natural filename/full-text search with normalized metadata results.
+
+`read_drive_file` is deployed and supports Google Docs, Sheets, Slides, PDF, and text files. Low-level acceptance includes supported content types, invalid input, missing files, and unsupported binary files. A final natural-language cross-tool regression through the MCP client remains before the Drive portion is considered fully acceptance-closed.
+
+During Drive acceptance, n8n `2.33.3` incorrectly routed a Google Drive 404 through the HTTP Request success output despite `Continue (using error output)`. Production was backed up and upgraded to `2.37.10`; the same 404 now follows the correct error branch and normalizes to `NOT_FOUND`.
 
 ## M3 — CRM integration
 
