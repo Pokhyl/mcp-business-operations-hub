@@ -238,7 +238,23 @@ The nonexistent-file test was the case that exposed the n8n `2.33.3` HTTP error-
 }
 ```
 
-A final natural-language cross-tool acceptance (`search_drive_files -> read_drive_file -> client summary`) remains to be rerun after the latest publish.
+Final natural-language cross-tool acceptance is complete. Through Claude, the user asked:
+
+```text
+Найди файл TikTok Video Pipeline в моём Google Drive и скажи, что в нём.
+```
+
+Observed production behavior:
+
+```text
+search_drive_files
+ -> found two matching Google Sheets
+ -> client selected the more recently modified match
+ -> read_drive_file(file_id)
+ -> client summarized the real sheet contents
+```
+
+The user supplied neither Drive query syntax nor a file ID. Claude summarized the actual intake-sheet columns and the populated request row, confirming that `search_drive_files -> read_drive_file -> client summary` works end to end.
 
 ## GitHub
 
@@ -307,6 +323,5 @@ The exports reference n8n credentials by credential metadata only; no plaintext 
 
 ## Exact next milestone
 
-1. Rerun the final natural-language Drive chain through the MCP client: `search_drive_files -> read_drive_file`.
-2. Implement `get_calendar_events`.
-3. Implement `find_free_time`.
+1. Implement `get_calendar_events`.
+2. Implement `find_free_time`.
