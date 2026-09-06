@@ -1,6 +1,23 @@
 # Current State
 
-Last verified: 2026-09-05.
+Last verified: 2026-09-06.
+
+## Runtime
+
+Production n8n runtime: `2.37.10`.
+
+The runtime was upgraded from `2.33.3` on 2026-09-06 after `HTTP Request` nodes configured with `On Error -> Continue (using error output)` were observed to route a Google Drive 404 payload through the success output instead of the error output. The production upgrade preserved the existing PostgreSQL/n8n data volumes, completed database migrations successfully, and passed health checks.
+
+Before the upgrade a full operational backup was created containing the PostgreSQL dump, n8n data archive, compose file, environment file, and SHA256 checksums.
+
+After the upgrade:
+
+- container image: `n8nio/n8n:2.37.10`
+- `/healthz`: OK
+- public editor: HTTP 200
+- the same Google Drive 404 now follows the HTTP Request error output correctly
+
+The old `2.33.3` image was intentionally retained temporarily for rollback.
 
 ## Deployed MCP gateway
 
@@ -17,6 +34,8 @@ Current production tool surface:
 - `get_job_details`
 - `search_emails`
 - `get_email_attachment`
+- `search_drive_files`
+- `read_drive_file`
 
 Legacy tools `hello_world` and `get_person` have been removed from the deployed MCP server.
 
@@ -26,13 +45,16 @@ M1 — Production cleanup: complete.
 
 M2 — Google Workspace expansion: in progress.
 
-Completed M2 item:
+Implemented and deployed M2 tools:
 
 - `get_email_attachment`
-
-Next M2 item:
-
 - `search_drive_files`
+- `read_drive_file`
+
+Remaining M2 tools:
+
+- `get_calendar_events`
+- `find_free_time`
 
 No write-capable behavior is exposed in M2.
 
@@ -72,6 +94,7 @@ Current normalized error codes include:
 - `INVALID_INPUT`
 - `NOT_FOUND`
 - `AMBIGUOUS_ATTACHMENT`
+- `UNSUPPORTED_FILE_TYPE`
 - `UPSTREAM_ERROR`
 
 ## Centralized audit logging
@@ -127,50 +150,95 @@ Public inputs:
 
 The user is never required to know or provide Gmail `attachmentId`.
 
-Current flow:
+The workflow recursively traverses MIME parts, discovers the real Gmail `body.attachmentId` internally, downloads the selected attachment, converts Gmail base64url to standard base64, and returns filename, MIME type, size, and `content_base64`.
+
+## Google Drive
+
+A dedicated Google OAuth2 credential named `Google Drive MCP readonly` is used with scope:
 
 ```text
-When Executed by Another Workflow
- -> Validate input
- -> Is input valid?
-    -> false: INVALID_INPUT
-    -> true: Audit start
-       -> Get message metadata (Gmail format=full)
-          -> Error: normalized Gmail UPSTREAM_ERROR
-          -> Success: Find attachment
-             -> recursively traverse MIME parts
-             -> discover body.attachmentId internally
-             -> prefer explicit Content-Disposition: attachment parts
-             -> if one candidate: select automatically
-             -> if filename supplied: exact match, then partial match
-             -> if several candidates remain: AMBIGUOUS_ATTACHMENT + available filenames
-             -> if no candidate matches: NOT_FOUND
-             -> selected: Get attachment data
-                -> Error: normalized Gmail UPSTREAM_ERROR
-                -> Success: convert Gmail base64url to standard base64
-                   -> Format MCP response
-                   -> Audit success
-                   -> Return MCP response
+https://www.googleapis.com/auth/drive.readonly
 ```
 
-Successful public output contains:
+### `search_drive_files`
 
-- `filename`
+Workflow: `MCP — Drive Search`
+
+Status: active and exposed through `MCP — Server`.
+
+Inputs:
+
+- `query` — required natural search term
+- `limit` — optional integer, default `10`, range `1..50`
+
+The workflow builds a Google Drive query internally and searches filename or full-text content while excluding trashed files. Returned file metadata includes:
+
+- `id`
+- `name`
 - `mime_type`
+- `modified_time`
 - `size`
-- `content_base64`
+- `web_view_link`
+- `parents`
+- `drive_id`
 
-The internal Gmail `attachmentId` is not returned in the public success response.
+Verified cases:
 
-Production end-to-end verification used a real Gmail message with one PNG attachment. The tool was called with only `message_id` and an empty filename. It automatically found the attachment, downloaded it, and returned:
+- normal search returning real Drive files
+- invalid limit -> `INVALID_INPUT`
+- nonexistent query -> `success=true`, empty `data`, `count=0`
+- natural MCP client search for `TikTok Video Pipeline` returned real matching Google Drive files
 
-- `success = true`
-- filename `paragon-fiskalny-PARKING1788567115966.png`
-- MIME type `image/png`
-- size `14376`
-- non-empty `content_base64`
+### `read_drive_file`
 
-The corresponding audit row finalized as `succeeded` with arguments containing `message_id` and `filename: null` and no public `attachment_id` argument.
+Workflow: `MCP — Drive Read File`
+
+Status: active and exposed through `MCP — Server`.
+
+Input:
+
+- `file_id` — required non-empty Google Drive file ID
+
+Supported content types:
+
+- Google Docs -> exported as `text/plain`
+- Google Sheets -> exported as `text/csv`
+- Google Slides -> exported as `text/plain`
+- PDF -> downloaded and text extracted
+- text-based regular files -> downloaded as text
+
+Text output is capped at `50000` characters. The response includes `truncated` and `original_content_length` so truncation is explicit rather than silent.
+
+Unsupported binary types return `UNSUPPORTED_FILE_TYPE`.
+
+Verified low-level cases:
+
+- Google Sheet: PASS
+- PDF: PASS
+- TXT/Markdown: PASS
+- Google Doc: PASS
+- Google Slides: PASS
+- unsupported MOV binary: `UNSUPPORTED_FILE_TYPE` PASS
+- empty/invalid `file_id`: `INVALID_INPUT` PASS
+- nonexistent `file_id`: `NOT_FOUND` PASS
+
+The nonexistent-file test was the case that exposed the n8n `2.33.3` HTTP error-output routing defect. After upgrading n8n to `2.37.10`, the provider 404 correctly reached the error branch. `Format Drive error` then normalizes `details.httpCode == 404` to:
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "NOT_FOUND",
+    "message": "Google Drive file not found"
+  },
+  "meta": {
+    "tool": "read_drive_file",
+    "count": 0
+  }
+}
+```
+
+A final natural-language cross-tool acceptance (`search_drive_files -> read_drive_file -> client summary`) remains to be rerun after the latest publish.
 
 ## GitHub
 
@@ -217,6 +285,8 @@ Current deployed workflow exports:
 - `n8n/gmail/GET_EMAIL_ATTACHMENT.json`
 - `n8n/postgres/GET_RECENT_JOBS.json`
 - `n8n/postgres/GET_JOB_DETAILS.json`
+- `n8n/drive/SEARCH_DRIVE_FILES.json`
+- `n8n/drive/READ_DRIVE_FILE.json`
 
 Audit migrations:
 
@@ -227,7 +297,8 @@ The exports reference n8n credentials by credential metadata only; no plaintext 
 
 ## Security state
 
-- Gmail and GitHub credentials remain in n8n credential storage.
+- Gmail, GitHub, and Google Drive credentials remain in n8n credential storage.
+- Google Drive uses a dedicated read-only OAuth scope.
 - PostgreSQL business-read tools use the read-only `mcp_read` credential.
 - The centralized audit workflow uses the write-capable application PostgreSQL credential only for `mcp_tool_calls` writes.
 - No write-capable business tool is exposed through MCP.
@@ -236,9 +307,6 @@ The exports reference n8n credentials by credential metadata only; no plaintext 
 
 ## Exact next milestone
 
-Continue M2 with:
-
-1. `search_drive_files`
-2. `read_drive_file`
-3. `get_calendar_events`
-4. `find_free_time`
+1. Rerun the final natural-language Drive chain through the MCP client: `search_drive_files -> read_drive_file`.
+2. Implement `get_calendar_events`.
+3. Implement `find_free_time`.
