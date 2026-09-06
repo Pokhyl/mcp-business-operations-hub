@@ -1,8 +1,8 @@
 # MCP Business Operations Hub
 
-Self-hosted **Model Context Protocol (MCP) gateway** that lets an AI assistant securely query real business systems through structured tools.
+Self-hosted **Model Context Protocol (MCP) gateway** that lets an AI assistant securely query real business systems through structured read-only tools.
 
-The project uses **n8n**, **PostgreSQL**, **Docker**, **Google Workspace APIs**, and **GitHub API**. The current deployed MCP server is connected to Claude and already exposes working read-only tools for Gmail, GitHub, and PostgreSQL.
+The project uses **n8n**, **PostgreSQL**, **Docker**, **Google Workspace APIs**, and **GitHub API**. The current production MCP server is connected to Claude and exposes working read tools for Gmail, Google Drive, GitHub, and PostgreSQL.
 
 ## Why this project exists
 
@@ -11,9 +11,10 @@ Business data is usually fragmented across email, source control, databases, cal
 Examples:
 
 - “Find the latest email about ZUS for August and tell me the amount and due date.”
+- “Find the attachment from the latest Paymove email.”
+- “Find the TikTok Video Pipeline file in Google Drive and tell me what is in it.”
 - “Why did the latest content job fail?”
 - “Read `docs/CURRENT_STATE.md` from the production repository.”
-- Future: “Find the customer, check their latest email, and tell me whether they have a meeting this week.”
 
 ## Current architecture
 
@@ -26,13 +27,13 @@ Claude / MCP Client
 |      OAuth2 protected     |
 +-------------+-------------+
               |
-     +--------+---------+----------------+
-     |                  |                |
-     v                  v                v
-   Gmail              GitHub         PostgreSQL
-     |                  |                |
-     v                  v                v
- full email body    repository files   job runtime data
+     +--------+---------+---------+----------------+
+     |                  |         |                |
+     v                  v         v                v
+   Gmail              Drive     GitHub         PostgreSQL
+     |                  |         |                |
+     v                  v         v                v
+ Gmail API          Drive API  GitHub API      job runtime data
 ```
 
 ## Implemented MCP tools
@@ -40,59 +41,54 @@ Claude / MCP Client
 | Tool | Source | Access | Status |
 |---|---|---|---|
 | `search_emails` | Gmail | Read-only | Working |
+| `get_email_attachment` | Gmail | Read-only | Working |
+| `search_drive_files` | Google Drive | Read-only | Working |
+| `read_drive_file` | Google Drive | Read-only | Working |
 | `get_github_file` | GitHub | Read-only | Working |
 | `get_recent_jobs` | PostgreSQL | Read-only | Working |
 | `get_job_details` | PostgreSQL | Read-only | Working |
 
-Two legacy test tools (`hello_world`, `get_person`) are still present in the currently deployed gateway and are scheduled for removal from the production tool surface.
+Legacy test tools `hello_world` and `get_person` have been removed from production.
 
-## Real use case: accounting email
+## Google Drive flow
 
-User prompt:
-
-```text
-Find the latest email about ZUS for August and tell me the amount and due date.
-```
-
-Execution path:
+The Drive integration deliberately separates discovery from reading:
 
 ```text
 Claude
-  -> search_emails
-  -> Gmail search
-  -> fetch each matching message
-  -> normalize full text body
-  -> Claude extracts the relevant business facts
+  -> search_drive_files(query, limit)
+  -> receives normalized file IDs/metadata
+  -> read_drive_file(file_id)
+  -> receives normalized text content
+  -> summarizes the source for the user
 ```
 
-The Gmail workflow deliberately returns a compact normalized structure rather than the complete Gmail API payload:
-
-```json
-{
-  "id": "...",
-  "threadId": "...",
-  "from": "...",
-  "to": "...",
-  "subject": "...",
-  "date": "...",
-  "body": "..."
-}
-```
-
-## Real use case: production debugging
-
-User prompt:
+Drive uses a dedicated OAuth credential restricted to:
 
 ```text
-Why did the latest content job fail?
+https://www.googleapis.com/auth/drive.readonly
 ```
 
-Execution path:
+`read_drive_file` supports Google Docs, Sheets, Slides, PDF, and text-based files. Unsupported binary files return `UNSUPPORTED_FILE_TYPE`; missing files return `NOT_FOUND`.
+
+## Gmail attachment flow
+
+The public attachment contract is intentionally simple:
+
+```text
+search_emails
+  -> message_id
+  -> get_email_attachment(message_id, optional filename)
+```
+
+Gmail `attachmentId` is discovered internally and is never required from the user.
+
+## Production debugging flow
 
 ```text
 Claude
   -> get_recent_jobs
-  -> identifies the latest failed job
+  -> identifies the relevant job
   -> get_job_details(job_id)
   -> analyzes current_stage + last_error
   -> returns a human-readable explanation
@@ -103,11 +99,12 @@ Claude
 The project follows a least-privilege model:
 
 - MCP endpoint authenticated through OAuth2.
-- External credentials stay in n8n credentials storage and are never committed to Git.
-- PostgreSQL MCP credential is read-only.
+- External credentials stay in n8n credentials storage and are never committed as plaintext secrets.
+- Google Drive uses a dedicated `drive.readonly` OAuth credential.
+- PostgreSQL business-read credential is read-only.
 - Current business tools are read-only.
 - Write tools will be separated from read tools and require explicit approval.
-- Every tool invocation is planned to be recorded in an audit log.
+- Tool calls use centralized audit logging with sensitive-argument sanitization.
 
 See [docs/SECURITY.md](docs/SECURITY.md).
 
@@ -117,6 +114,7 @@ See [docs/SECURITY.md](docs/SECURITY.md).
 mcp-business-operations-hub/
 ├── README.md
 ├── docs/
+│   ├── ACCEPTANCE_TESTS.md
 │   ├── ARCHITECTURE.md
 │   ├── CURRENT_STATE.md
 │   ├── MCP_TOOLS.md
@@ -125,8 +123,13 @@ mcp-business-operations-hub/
 │   └── USE_CASES.md
 ├── n8n/
 │   ├── MCP_SERVER.json
+│   ├── AUDIT_TOOL_CALL.json
+│   ├── drive/
+│   │   ├── SEARCH_DRIVE_FILES.json
+│   │   └── READ_DRIVE_FILE.json
 │   ├── gmail/
-│   │   └── SEARCH_EMAILS.json
+│   │   ├── SEARCH_EMAILS.json
+│   │   └── GET_EMAIL_ATTACHMENT.json
 │   ├── github/
 │   │   └── GET_GITHUB_FILE.json
 │   └── postgres/
@@ -134,22 +137,10 @@ mcp-business-operations-hub/
 │       └── GET_RECENT_JOBS.json
 ├── database/
 │   └── migrations/
-│       └── 001_mcp_tool_audit.sql
+│       ├── 001_mcp_tool_audit.sql
+│       └── 002_redact_existing_email_audit_queries.sql
 └── examples/
-    ├── accounting-zus.md
-    └── production-debugging.md
 ```
-
-## Planned integrations
-
-Next integrations are deliberately added as independent MCP tools instead of giving the model unrestricted API access:
-
-- Google Drive: `search_drive_files`, `read_drive_file`
-- Google Calendar: `get_calendar_events`, `find_free_time`
-- CRM: `search_customers`, `get_customer_details`
-- Gmail attachments: `get_email_attachment`
-- Auditing and observability for every tool call
-- Explicit approval boundary for state-changing tools
 
 ## Engineering principles
 
@@ -159,17 +150,29 @@ Next integrations are deliberately added as independent MCP tools instead of giv
 4. **Read/write separation.** Read operations and state-changing operations are never mixed silently.
 5. **Source-grounded answers.** The AI receives raw business evidence from tools and reasons over that evidence.
 6. **Auditable execution.** Tool calls are observable and attributable.
+7. **Fix runtime defects at the runtime layer.** Do not add workflow-specific bypasses for known platform bugs when a supported runtime fix exists.
 
-## Stack
+## Runtime
 
-- n8n self-hosted
-- Model Context Protocol (MCP)
-- Docker
-- PostgreSQL
-- Gmail API / OAuth2
-- GitHub API
-- Claude as MCP client
+Production n8n is pinned to `2.37.10`.
 
-## Status
+On 2026-09-06 production was upgraded from `2.33.3` after a Google Drive 404 exposed incorrect HTTP error-output routing in that runtime. A full backup was created first; post-upgrade health checks and the 404 regression passed.
 
-**Foundation / working prototype.** The core MCP gateway and four real read-only business tools are operational. The next milestone is production hardening: audit logging, cleanup of legacy test tools, Drive/Calendar integrations, and explicit write-operation approval boundaries.
+## Roadmap
+
+Current milestone: **M2 — Google Workspace expansion**.
+
+Completed:
+
+- Gmail attachment retrieval
+- Google Drive search
+- Google Drive file reading
+
+Next:
+
+- final natural-language Drive cross-tool regression
+- Google Calendar read tools
+- later CRM reads
+- controlled write tools behind explicit approval
+
+See [docs/ROADMAP.md](docs/ROADMAP.md) and [docs/CURRENT_STATE.md](docs/CURRENT_STATE.md).
