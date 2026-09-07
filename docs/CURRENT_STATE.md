@@ -1,6 +1,6 @@
 # Current State
 
-Last verified: 2026-09-06.
+Last verified: 2026-09-07.
 
 ## Runtime
 
@@ -37,6 +37,8 @@ Current production tool surface:
 - `search_drive_files`
 - `read_drive_file`
 
+`get_calendar_events` is implemented, published, and low-level accepted as a sub-workflow, but is not yet exposed through `MCP — Server`.
+
 Legacy tools `hello_world` and `get_person` have been removed from the deployed MCP server.
 
 ## Milestone status
@@ -45,15 +47,18 @@ M1 — Production cleanup: complete.
 
 M2 — Google Workspace expansion: in progress.
 
-Implemented and deployed M2 tools:
+Exposed M2 tools:
 
 - `get_email_attachment`
 - `search_drive_files`
 - `read_drive_file`
 
-Remaining M2 tools:
+Implemented and published, exposure pending:
 
 - `get_calendar_events`
+
+Remaining M2 workflow:
+
 - `find_free_time`
 
 No write-capable behavior is exposed in M2.
@@ -256,6 +261,52 @@ search_drive_files
 
 The user supplied neither Drive query syntax nor a file ID. Claude summarized the actual intake-sheet columns and the populated request row, confirming that `search_drive_files -> read_drive_file -> client summary` works end to end.
 
+## Google Calendar
+
+A dedicated Google OAuth2 credential named `Google Calendar MCP readonly` is used with scope:
+
+```text
+https://www.googleapis.com/auth/calendar.readonly
+```
+
+### `get_calendar_events`
+
+Workflow: `MCP — Calendar Events`
+
+Workflow ID: `IUpcFPRH3xOVbgEq`.
+
+Status: active and published; not yet exposed through `MCP — Server`.
+
+Inputs:
+
+- `start` — required RFC3339 timestamp with timezone
+- `end` — required RFC3339 timestamp with timezone and must be later than `start`
+- `calendar_id` — optional string, defaults to `primary`
+- `limit` — optional integer, defaults to `50`, range `1..2500`
+
+Flow:
+
+```text
+Validate input
+ -> Audit start
+ -> Google Calendar events.list
+ -> Normalize success/error
+ -> Audit finish
+ -> Return original MCP response
+```
+
+The provider call uses `singleEvents=true` and `orderBy=startTime`. Timed events preserve `dateTime`; all-day events preserve `date`. Normalized output includes event id, status, summary, description, location, start/end, organizer, attendees, HTML link, and recurring event id.
+
+Low-level acceptance completed on 2026-09-07:
+
+- empty input -> `INVALID_INPUT` before audit/provider access
+- valid `primary` window -> Google returned `calendar#events`; normalized `success=true`; empty results remain a successful empty list
+- nonexistent calendar -> real provider HTTP 404 reached Error output and normalized to `NOT_FOUND`
+- success audit row finalized as `succeeded` with non-null duration
+- 404 audit row finalized as `failed` with `error_code=NOT_FOUND` and non-null duration
+
+The real Calendar error object exposes `details.httpCode="404"`; normalization uses that status field rather than parsing provider text.
+
 ## GitHub
 
 Workflow: `MCP — GitHub Read File`
@@ -303,6 +354,7 @@ Current deployed workflow exports:
 - `n8n/postgres/GET_JOB_DETAILS.json`
 - `n8n/drive/SEARCH_DRIVE_FILES.json`
 - `n8n/drive/READ_DRIVE_FILE.json`
+- `n8n/calendar/GET_CALENDAR_EVENTS.json`
 
 Audit migrations:
 
@@ -313,8 +365,9 @@ The exports reference n8n credentials by credential metadata only; no plaintext 
 
 ## Security state
 
-- Gmail, GitHub, and Google Drive credentials remain in n8n credential storage.
+- Gmail, GitHub, Google Drive, and Google Calendar credentials remain in n8n credential storage.
 - Google Drive uses a dedicated read-only OAuth scope.
+- Google Calendar uses the dedicated `calendar.readonly` OAuth scope.
 - PostgreSQL business-read tools use the read-only `mcp_read` credential.
 - The centralized audit workflow uses the write-capable application PostgreSQL credential only for `mcp_tool_calls` writes.
 - No write-capable business tool is exposed through MCP.
@@ -323,5 +376,5 @@ The exports reference n8n credentials by credential metadata only; no plaintext 
 
 ## Exact next milestone
 
-1. Implement `get_calendar_events`.
+1. Expose `get_calendar_events` through `MCP — Server` and run a natural-language MCP client acceptance.
 2. Implement `find_free_time`.
