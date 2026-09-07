@@ -193,11 +193,49 @@ Returned fields include status, current stage, last error, review fields, and ti
 
 Access: read-only PostgreSQL query.
 
+## Implemented sub-workflow awaiting MCP exposure
+
+### `get_calendar_events`
+
+Workflow: `MCP — Calendar Events` (`IUpcFPRH3xOVbgEq`).
+
+Purpose: read Google Calendar events for an explicit time window.
+
+Inputs:
+
+```json
+{
+  "start": "2026-09-01T00:00:00+02:00",
+  "end": "2026-10-01T00:00:00+02:00",
+  "calendar_id": "primary",
+  "limit": 50
+}
+```
+
+Rules:
+
+- `start` and `end` must be RFC3339 timestamps with timezone.
+- `end` must be later than `start`.
+- `calendar_id` defaults to `primary`.
+- `limit` defaults to `50` and must be an integer from `1` to `2500`.
+- recurring events are expanded with `singleEvents=true` and sorted with `orderBy=startTime`.
+
+Successful output normalizes event ID, status, summary, description, location, timed/all-day start and end values, organizer, attendees, HTML link, and recurring-event ID.
+
+Errors:
+
+- invalid input -> `INVALID_INPUT`
+- missing/nonexistent calendar (provider HTTP 404) -> `NOT_FOUND`
+- other Calendar API failures -> `UPSTREAM_ERROR`
+
+Access: read-only through dedicated `Google Calendar MCP readonly` OAuth credential with `https://www.googleapis.com/auth/calendar.readonly`.
+
+Low-level success/error/audit acceptance is complete. The workflow is not yet exposed through `MCP — Server`; natural-language MCP client acceptance remains pending.
+
 ## Planned tools
 
 ### Google Calendar
 
-- `get_calendar_events(start, end)`
 - `find_free_time(start, end, duration_minutes)`
 
 ### CRM
