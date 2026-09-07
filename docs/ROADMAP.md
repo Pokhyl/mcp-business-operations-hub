@@ -45,7 +45,9 @@ Status: in progress.
 
 `search_drive_files` is deployed with a dedicated Google Drive `drive.readonly` OAuth credential and supports natural filename/full-text search with normalized metadata results.
 
-`read_drive_file` is deployed and supports Google Docs, Sheets, Slides, PDF, and text files. Low-level acceptance includes supported content types, invalid input, missing files, and unsupported binary files. A final natural-language cross-tool regression through the MCP client remains before the Drive portion is considered fully acceptance-closed.
+`read_drive_file` is deployed and supports Google Docs, Sheets, Slides, PDF, and text files. Low-level and natural-language cross-tool acceptance are complete.
+
+`get_calendar_events` workflow implementation is complete, published, and low-level accepted. Verified cases include `INVALID_INPUT`, successful primary-calendar retrieval, provider 404 -> `NOT_FOUND`, and succeeded/failed audit finalization. It remains unchecked here until it is exposed through `MCP — Server` and passes natural-language MCP client acceptance.
 
 During Drive acceptance, n8n `2.33.3` incorrectly routed a Google Drive 404 through the HTTP Request success output despite `Continue (using error output)`. Production was backed up and upgraded to `2.37.10`; the same 404 now follows the correct error branch and normalizes to `NOT_FOUND`.
 
