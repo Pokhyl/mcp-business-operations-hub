@@ -1,6 +1,6 @@
 # Current State
 
-Last verified: 2026-09-07.
+Last verified: 2026-09-08.
 
 ## Runtime
 
@@ -23,45 +23,53 @@ The old `2.33.3` image was intentionally retained temporarily for rollback.
 
 Workflow: `MCP — Server`
 
+Workflow ID: `dSohghXnQp078EZm`
+
 Status: active.
 
 Authentication: n8n OAuth2 user authentication for the MCP endpoint.
 
-Current production tool surface:
+Current published version verified on 2026-09-08:
 
-- `get_github_file`
-- `get_recent_jobs`
-- `get_job_details`
-- `search_emails`
+```text
+version_id: db01b624-5108-4998-8a53-fd12680c9d25
+active_version_id: db01b624-5108-4998-8a53-fd12680c9d25
+```
+
+Current published tool surface:
+
+- `find_free_time`
 - `get_email_attachment`
-- `search_drive_files`
+- `get_github_file`
+- `get_job_details`
+- `get_recent_jobs`
 - `read_drive_file`
+- `search_drive_files`
+- `search_emails`
 
-`get_calendar_events` is implemented, published, and low-level accepted as a sub-workflow, but is not yet exposed through `MCP — Server`.
+Important regression: the previously accepted `get_calendar_events` tool node is currently missing from the published `MCP — Server` surface. The underlying `MCP — Calendar Events` sub-workflow is still active and accepted. The regression is documented in `docs/MCP_SERVER_REGRESSION_2026-09-08.md`.
 
-Legacy tools `hello_world` and `get_person` have been removed from the deployed MCP server.
+The existing repository export `n8n/MCP_SERVER.json` was intentionally not overwritten with this regressed state because it preserves the last accepted `get_calendar_events` tool configuration needed for recovery.
+
+Legacy tools `hello_world` and `get_person` remain removed.
 
 ## Milestone status
 
 M1 — Production cleanup: complete.
 
-M2 — Google Workspace expansion: in progress.
+M2 — Google Workspace expansion: in progress; final Calendar gateway recovery pending.
 
-Exposed M2 tools:
+Completed M2 tools:
 
 - `get_email_attachment`
 - `search_drive_files`
 - `read_drive_file`
-
-Implemented and published, exposure pending:
-
-- `get_calendar_events`
-
-Remaining M2 workflow:
-
-- `find_free_time`
+- `get_calendar_events` — implementation and acceptance complete, but current MCP gateway exposure must be restored
+- `find_free_time` — implementation, publication, MCP exposure, and natural-language E2E acceptance complete
 
 No write-capable behavior is exposed in M2.
+
+M2 is not considered complete until `get_calendar_events` and `find_free_time` are simultaneously present in the same published MCP Server version and one natural-language regression request for each tool passes.
 
 ## Normalized MCP contract
 
@@ -133,7 +141,7 @@ All finish-audit subworkflow calls omit `arguments_json`; only audit start write
 
 Workflow: `MCP — Gmail Search`
 
-Status: active.
+Status: active and exposed through `MCP — Server`.
 
 Inputs:
 
@@ -227,22 +235,6 @@ Verified low-level cases:
 - empty/invalid `file_id`: `INVALID_INPUT` PASS
 - nonexistent `file_id`: `NOT_FOUND` PASS
 
-The nonexistent-file test was the case that exposed the n8n `2.33.3` HTTP error-output routing defect. After upgrading n8n to `2.37.10`, the provider 404 correctly reached the error branch. `Format Drive error` then normalizes `details.httpCode == 404` to:
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "NOT_FOUND",
-    "message": "Google Drive file not found"
-  },
-  "meta": {
-    "tool": "read_drive_file",
-    "count": 0
-  }
-}
-```
-
 Final natural-language cross-tool acceptance is complete. Through Claude, the user asked:
 
 ```text
@@ -259,7 +251,7 @@ search_drive_files
  -> client summarized the real sheet contents
 ```
 
-The user supplied neither Drive query syntax nor a file ID. Claude summarized the actual intake-sheet columns and the populated request row, confirming that `search_drive_files -> read_drive_file -> client summary` works end to end.
+The user supplied neither Drive query syntax nor a file ID.
 
 ## Google Calendar
 
@@ -275,7 +267,7 @@ Workflow: `MCP — Calendar Events`
 
 Workflow ID: `IUpcFPRH3xOVbgEq`.
 
-Status: active and published; not yet exposed through `MCP — Server`.
+Status: active, published, low-level accepted, and natural-language accepted. Current MCP Server exposure is temporarily missing because of the gateway regression described above.
 
 Inputs:
 
@@ -284,34 +276,87 @@ Inputs:
 - `calendar_id` — optional string, defaults to `primary`
 - `limit` — optional integer, defaults to `50`, range `1..2500`
 
-Flow:
+Provider call:
 
 ```text
-Validate input
- -> Audit start
- -> Google Calendar events.list
- -> Normalize success/error
- -> Audit finish
- -> Return original MCP response
+Google Calendar events.list
 ```
 
-The provider call uses `singleEvents=true` and `orderBy=startTime`. Timed events preserve `dateTime`; all-day events preserve `date`. Normalized output includes event id, status, summary, description, location, start/end, organizer, attendees, HTML link, and recurring event id.
+with `singleEvents=true` and `orderBy=startTime`.
 
-Low-level acceptance completed on 2026-09-07:
+Low-level acceptance:
 
 - empty input -> `INVALID_INPUT` before audit/provider access
-- valid `primary` window -> Google returned `calendar#events`; normalized `success=true`; empty results remain a successful empty list
-- nonexistent calendar -> real provider HTTP 404 reached Error output and normalized to `NOT_FOUND`
-- success audit row finalized as `succeeded` with non-null duration
-- 404 audit row finalized as `failed` with `error_code=NOT_FOUND` and non-null duration
+- valid `primary` window -> normalized `success=true`; empty results remain a successful empty list
+- nonexistent calendar -> provider HTTP 404 -> `NOT_FOUND`
+- success and failure audit rows finalize with non-null durations
 
-The real Calendar error object exposes `details.httpCode="404"`; normalization uses that status field rather than parsing provider text.
+Natural-language acceptance through Claude:
+
+- current week -> correct empty result
+- month -> correct empty result
+- year -> correct empty result
+- user confirmed the source calendar was actually empty
+
+Detailed evidence: `docs/CALENDAR_ACCEPTANCE.md`.
+
+### `find_free_time`
+
+Workflow: `MCP — Find Free Time`
+
+Workflow ID: `dDiqHH9C5clOrYOX`.
+
+Status: active, published, exposed through the current MCP Server, and natural-language E2E accepted.
+
+Published workflow version:
+
+```text
+version_id: efe02511-9b12-4274-9d1a-39e597d7fe3a
+active_version_id: efe02511-9b12-4274-9d1a-39e597d7fe3a
+```
+
+Inputs:
+
+- `start` — required RFC3339 timestamp with timezone
+- `end` — required RFC3339 timestamp with timezone and must be later than `start`
+- `duration_minutes` — optional positive integer, defaults to `30`, and must fit within the requested range
+- `calendar_id` — optional string, defaults to `primary`
+
+Provider call:
+
+```text
+POST https://www.googleapis.com/calendar/v3/freeBusy
+```
+
+The workflow explicitly checks per-calendar FreeBusy errors even when the HTTP response is 200, then merges overlapping/touching busy intervals and returns maximal free windows that are at least `duration_minutes` long.
+
+Natural-language production acceptance through Claude:
+
+```text
+Найди мне завтра свободное окно на 60 минут с 9:00 до 18:00.
+```
+
+The MCP client generated the expected RFC3339 time window for 2026-09-09, used `calendar_id=primary`, and returned the entire 09:00–18:00 range as free. The connected primary calendar was actually empty, so the result matched the source of truth.
+
+Audit evidence for the accepted request:
+
+```text
+tool_name:        find_free_time
+status:           succeeded
+duration_ms:      640
+start:            2026-09-09T09:00:00+02:00
+end:              2026-09-09T18:00:00+02:00
+duration_minutes: 60
+calendar_id:      primary
+```
+
+Detailed evidence: `docs/FIND_FREE_TIME_ACCEPTANCE.md`.
 
 ## GitHub
 
 Workflow: `MCP — GitHub Read File`
 
-Status: active.
+Status: active and exposed through `MCP — Server`.
 
 Input: repository-relative `path`.
 
@@ -321,13 +366,13 @@ Missing files normalize to `NOT_FOUND`; other provider failures use `UPSTREAM_ER
 
 Workflow: `MCP — PostgreSQL Recent Jobs`
 
-Status: active.
+Status: active and exposed through `MCP — Server`.
 
 Input: optional `limit`, default `10`, range `1..50`.
 
 Workflow: `MCP — PostgreSQL Job Details`
 
-Status: active.
+Status: active and exposed through `MCP — Server`.
 
 Input: UUID `job_id`.
 
@@ -337,15 +382,21 @@ Zero-row results normalize to `NOT_FOUND`. Database failures normalize to `UPSTR
 
 Production acceptance evidence and regression rules are documented in:
 
-`docs/ACCEPTANCE_TESTS.md`
+- `docs/ACCEPTANCE_TESTS.md`
+- `docs/CALENDAR_ACCEPTANCE.md`
+- `docs/FIND_FREE_TIME_ACCEPTANCE.md`
+
+The current MCP gateway regression is documented in:
+
+- `docs/MCP_SERVER_REGRESSION_2026-09-08.md`
 
 Provider/database error branches are not deliberately forced by breaking working production credentials or SQL.
 
 ## Repository export state
 
-Current deployed workflow exports:
+Workflow exports include:
 
-- `n8n/MCP_SERVER.json`
+- `n8n/MCP_SERVER.json` — last accepted gateway export containing `get_calendar_events`; intentionally not overwritten with the current regressed production gateway
 - `n8n/AUDIT_TOOL_CALL.json`
 - `n8n/github/GET_GITHUB_FILE.json`
 - `n8n/gmail/SEARCH_EMAILS.json`
@@ -355,6 +406,7 @@ Current deployed workflow exports:
 - `n8n/drive/SEARCH_DRIVE_FILES.json`
 - `n8n/drive/READ_DRIVE_FILE.json`
 - `n8n/calendar/GET_CALENDAR_EVENTS.json`
+- `n8n/calendar/FIND_FREE_TIME.json`
 
 Audit migrations:
 
@@ -376,5 +428,8 @@ The exports reference n8n credentials by credential metadata only; no plaintext 
 
 ## Exact next milestone
 
-1. Expose `get_calendar_events` through `MCP — Server` and run a natural-language MCP client acceptance.
-2. Implement `find_free_time`.
+1. Restore the previously accepted `get_calendar_events` tool node in the current `MCP — Server` without removing `find_free_time`.
+2. Publish the server and verify both Calendar tools are present simultaneously.
+3. Run one natural-language regression request for `get_calendar_events` and one for `find_free_time`.
+4. Export the repaired final MCP Server to `n8n/MCP_SERVER.json`.
+5. Close M2 only after those gateway regression checks pass.
