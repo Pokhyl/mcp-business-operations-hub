@@ -33,14 +33,16 @@ Production acceptance evidence and regression rules are documented in `docs/ACCE
 
 ## M2 — Google Workspace expansion
 
-Status: in progress — Calendar gateway regression recovery pending.
+Status: in progress — final post-recovery gateway regression acceptance pending.
 
 - [x] `get_email_attachment`
 - [x] `search_drive_files`
 - [x] `read_drive_file`
 - [x] `get_calendar_events`
 - [x] `find_free_time`
-- [ ] Restore both accepted Calendar tools simultaneously in the published `MCP — Server` surface and rerun gateway regression acceptance
+- [x] Restore both accepted Calendar tools simultaneously in the published `MCP — Server` surface
+- [ ] Rerun one natural-language gateway regression request for `get_calendar_events`
+- [ ] Rerun one natural-language gateway regression request for `find_free_time`
 
 `get_email_attachment` is deployed as a read-only MCP tool. The public contract is `message_id` plus optional `filename`; Gmail `attachmentId` is discovered internally and is never required from the user.
 
@@ -50,9 +52,9 @@ Status: in progress — Calendar gateway regression recovery pending.
 
 `get_calendar_events` implementation, low-level acceptance, audit verification, MCP exposure, and natural-language client acceptance are complete. Natural-language checks covered week, month, and year windows against the real primary calendar.
 
-`find_free_time` is implemented with Google Calendar FreeBusy, published, exposed, and accepted through a natural-language MCP client request. A real request for a 60-minute slot on 2026-09-09 from 09:00 to 18:00 produced the expected all-day free window and a succeeded audit row with `duration_ms=640`.
+`find_free_time` is implemented with Google Calendar FreeBusy, published, exposed, and accepted through a natural-language MCP client request. A real request for a 60-minute slot on 2026-09-09 from 09:00 to 18:00 produced the expected free window and a succeeded audit row with `duration_ms=640`.
 
-During post-acceptance inspection on 2026-09-08, the current published `MCP — Server` was found to contain `find_free_time` but no longer contain the previously accepted `get_calendar_events` node. This is tracked in `docs/MCP_SERVER_REGRESSION_2026-09-08.md`. M2 remains open until `get_calendar_events` is restored, both Calendar tools are present in the same published gateway version, and one regression request for each tool passes.
+A Calendar gateway regression found during post-acceptance inspection on 2026-09-08 has been structurally recovered: `get_calendar_events` and `find_free_time` are again present together in the same active `MCP — Server` version (`07843872-4ab5-46f1-8df9-9a6bc8418673`), both are connected to `MCP Server Trigger`, and `n8n/MCP_SERVER.json` has been synchronized with that recovered production surface. The regression remains open only for the two final natural-language post-recovery checks documented in `docs/MCP_SERVER_REGRESSION_2026-09-08.md`.
 
 During Drive acceptance, n8n `2.33.3` incorrectly routed a Google Drive 404 through the HTTP Request success output despite `Continue (using error output)`. Production was backed up and upgraded to `2.37.10`; the same 404 now follows the correct error branch and normalizes to `NOT_FOUND`.
 
