@@ -193,9 +193,7 @@ Returned fields include status, current stage, last error, review fields, and ti
 
 Access: read-only PostgreSQL query.
 
-## Implemented sub-workflow awaiting MCP exposure
-
-### `get_calendar_events`
+## `get_calendar_events`
 
 Workflow: `MCP — Calendar Events` (`IUpcFPRH3xOVbgEq`).
 
@@ -230,13 +228,72 @@ Errors:
 
 Access: read-only through dedicated `Google Calendar MCP readonly` OAuth credential with `https://www.googleapis.com/auth/calendar.readonly`.
 
-Low-level success/error/audit acceptance is complete. The workflow is not yet exposed through `MCP — Server`; natural-language MCP client acceptance remains pending.
+Acceptance: low-level success/error/audit tests and natural-language MCP client tests are complete. Natural-language checks covered current week, month, and year windows.
+
+Current gateway note: during the 2026-09-08 `find_free_time` rollout, the currently published `MCP — Server` lost this already accepted tool node. The sub-workflow remains active and accepted. Recovery is tracked in `docs/MCP_SERVER_REGRESSION_2026-09-08.md`.
+
+## `find_free_time`
+
+Workflow: `MCP — Find Free Time` (`dDiqHH9C5clOrYOX`).
+
+Purpose: return maximal free windows in Google Calendar that can fit a requested minimum duration.
+
+Inputs:
+
+```json
+{
+  "start": "2026-09-09T09:00:00+02:00",
+  "end": "2026-09-09T18:00:00+02:00",
+  "duration_minutes": 60,
+  "calendar_id": "primary"
+}
+```
+
+Rules:
+
+- `start` and `end` must be RFC3339 timestamps with timezone.
+- `end` must be later than `start`.
+- `duration_minutes` defaults to `30`, must be a positive integer, and must fit inside the requested range.
+- `calendar_id` defaults to `primary`.
+- the workflow uses Google Calendar `freeBusy.query`, not full event retrieval.
+- provider-level calendar errors returned inside an HTTP 200 FreeBusy response are checked before computing windows.
+- overlapping/touching busy intervals are merged before free windows are derived.
+- only free windows at least `duration_minutes` long are returned.
+
+Successful output:
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "start": "2026-09-09T07:00:00.000Z",
+      "end": "2026-09-09T16:00:00.000Z",
+      "duration_minutes": 540
+    }
+  ],
+  "meta": {
+    "tool": "find_free_time",
+    "count": 1,
+    "calendar_id": "primary",
+    "requested_duration_minutes": 60
+  }
+}
+```
+
+Errors:
+
+- invalid input -> `INVALID_INPUT`
+- missing/nonexistent calendar -> `NOT_FOUND`
+- other Calendar FreeBusy failures -> `UPSTREAM_ERROR`
+
+Access: read-only through the same dedicated `Google Calendar MCP readonly` OAuth credential.
+
+Acceptance: published, exposed, and natural-language E2E accepted on 2026-09-08. The production audit row for the accepted call finalized as `succeeded` with `duration_ms=640`.
+
+Detailed evidence: `docs/FIND_FREE_TIME_ACCEPTANCE.md`.
 
 ## Planned tools
-
-### Google Calendar
-
-- `find_free_time(start, end, duration_minutes)`
 
 ### CRM
 
