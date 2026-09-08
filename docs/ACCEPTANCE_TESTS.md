@@ -1,18 +1,8 @@
 # Acceptance Tests
 
-Last verified: 2026-09-06.
+Last verified: 2026-09-08.
 
-This document records production acceptance evidence for the deployed read-only MCP tool surface.
-
-Current tools:
-
-- `get_github_file`
-- `get_recent_jobs`
-- `get_job_details`
-- `search_emails`
-- `get_email_attachment`
-- `search_drive_files`
-- `read_drive_file`
+This document records production acceptance evidence for the read-only MCP tool surface and the current gateway regression state.
 
 ## Common contract
 
@@ -86,6 +76,15 @@ For valid inputs that reach a provider/database operation:
 | DR-07 | `read_drive_file` | Empty/invalid file ID | `INVALID_INPUT` | PASS |
 | DR-08 | `read_drive_file` | Nonexistent file ID | `NOT_FOUND` | PASS |
 | DR-09 | Drive cross-tool chain | natural prompt -> search -> read -> client summary | MCP client selects a real match, reads it, and summarizes content without user-provided file ID | PASS |
+| CE-01 | `get_calendar_events` | Invalid input | `INVALID_INPUT`, no audit/provider call | PASS |
+| CE-02 | `get_calendar_events` | Valid primary window | normalized `success=true`; empty list allowed | PASS |
+| CE-03 | `get_calendar_events` | Nonexistent calendar | provider 404 -> `NOT_FOUND` | PASS |
+| CE-04 | `get_calendar_events` | Audit lifecycle | succeeded and failed rows finalize with duration | PASS |
+| CE-05 | `get_calendar_events` | Natural week/month/year prompts | MCP client resolves time windows and returns source-accurate empty results | PASS |
+| FF-01 | `find_free_time` | Published workflow state | `versionId == activeVersionId` | PASS |
+| FF-02 | `find_free_time` | Natural 60-minute slot request | source-accurate free window returned | PASS |
+| FF-03 | `find_free_time` | Audit lifecycle | succeeded row with non-null duration | PASS |
+| GW-01 | MCP Server Calendar surface | both accepted Calendar tools simultaneously present | `get_calendar_events` and `find_free_time` both exposed | FAIL — recovery pending |
 
 ## Verified Gmail attachment evidence
 
@@ -186,23 +185,7 @@ Observed successful Google Slides export to plain text with real slide content.
 
 ### DR-06 — unsupported binary
 
-A real MOV file returned:
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "UNSUPPORTED_FILE_TYPE",
-    "message": "This Google Drive file type is not supported for text extraction"
-  },
-  "meta": {
-    "tool": "read_drive_file",
-    "count": 0
-  }
-}
-```
-
-The failure path completed `Audit failed` and preserved the normalized business error.
+A real MOV file returned `UNSUPPORTED_FILE_TYPE`. The failure path completed `Audit failed` and preserved the normalized business error.
 
 ### DR-07 — invalid input
 
@@ -210,42 +193,11 @@ Empty `file_id` returns `INVALID_INPUT` before audit/provider access.
 
 ### DR-08 — nonexistent Drive file
 
-Test input:
+A deliberately nonexistent file ID produced a real Google Drive HTTP 404.
 
-```text
-1_THIS_FILE_DOES_NOT_EXIST_987654321
-```
+On n8n `2.33.3`, the HTTP Request node incorrectly routed the 404 through the success output despite `On Error -> Continue (using error output)`. Production was backed up and upgraded to `2.37.10` rather than adding a workflow-specific workaround.
 
-On n8n `2.33.3`, the Google Drive metadata request produced a real HTTP 404 object containing `details.httpCode="404"`, but `HTTP Request` incorrectly sent that item through the success output despite `On Error -> Continue (using error output)`. That caused downstream file-type fallback and initially misclassified the missing file as an unsupported type.
-
-This was treated as a runtime defect, not patched with an extra workflow-specific IF. Production was backed up and n8n was upgraded to `2.37.10`.
-
-After the upgrade the same 404 correctly followed:
-
-```text
-Get file metadata
- -> Error output
- -> Format Drive error
- -> Preserve MCP error
- -> Audit failed
- -> Return MCP error
-```
-
-`Format Drive error` reads the actual provider status from `details.httpCode` and normalizes 404 to:
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "NOT_FOUND",
-    "message": "Google Drive file not found"
-  },
-  "meta": {
-    "tool": "read_drive_file",
-    "count": 0
-  }
-}
-```
+After the upgrade the 404 followed the intended error output and normalized to `NOT_FOUND`.
 
 Status: PASS.
 
@@ -259,25 +211,162 @@ Natural user prompt through Claude:
 
 Observed behavior:
 
-1. The MCP client used `search_drive_files` and found two matching Google Sheets with the same visible name.
-2. It selected the more recently modified match automatically rather than asking the user for a Drive file ID.
-3. It called `read_drive_file` for that selected file.
-4. It summarized real sheet content, including the intake columns (`request_id`, `topic`, `language_code`, `start`, `status`, `job_id`, `correlation_id`, `error_message`, `created_at`, `updated_at`) and the one populated request row.
-5. The answer explicitly identified the sheet as an intake/queue for the TikTok video pipeline and distinguished the populated row from the remaining blank template rows.
-
-This verifies the intended production chain:
-
-```text
-natural user request
- -> search_drive_files
- -> select real Drive result
- -> read_drive_file(file_id)
- -> client summary
-```
+1. `search_drive_files` found two matching Google Sheets.
+2. The client selected the more recently modified match automatically.
+3. `read_drive_file` read that file.
+4. Claude summarized the real intake-sheet content.
 
 No Drive query syntax or file ID was supplied by the user.
 
 Status: PASS.
+
+## Verified Google Calendar events evidence
+
+Detailed evidence is stored in `docs/CALENDAR_ACCEPTANCE.md`.
+
+### CE-01 — invalid input
+
+Empty input returns `INVALID_INPUT` before audit/provider access.
+
+Status: PASS.
+
+### CE-02 — valid primary calendar window
+
+Test input:
+
+```json
+{
+  "start": "2026-09-01T00:00:00+02:00",
+  "end": "2026-10-01T00:00:00+02:00",
+  "calendar_id": "primary",
+  "limit": 50
+}
+```
+
+The Google Calendar API returned a valid `calendar#events` response. The tested calendar was empty, so the normalized result was `success=true`, `data=[]`, `count=0`.
+
+Status: PASS.
+
+### CE-03 — nonexistent calendar
+
+A deliberately nonexistent calendar produced HTTP 404, which followed the HTTP Request error output and normalized to:
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "NOT_FOUND",
+    "message": "Google Calendar not found"
+  },
+  "meta": {
+    "tool": "get_calendar_events",
+    "count": 0
+  }
+}
+```
+
+Status: PASS.
+
+### CE-04 — audit lifecycle
+
+Database evidence contains succeeded and failed `get_calendar_events` rows with non-null duration values.
+
+Status: PASS.
+
+### CE-05 — natural-language acceptance
+
+Through Claude, natural requests for the current week, a month, and a year all invoked `get_calendar_events`. Claude reported no events, and the user confirmed that the source primary calendar was actually empty.
+
+Status: PASS.
+
+## Verified Find Free Time evidence
+
+Detailed evidence is stored in `docs/FIND_FREE_TIME_ACCEPTANCE.md`.
+
+### FF-01 — publication
+
+`MCP — Find Free Time` (`dDiqHH9C5clOrYOX`) is active and published with:
+
+```text
+versionId:       efe02511-9b12-4274-9d1a-39e597d7fe3a
+activeVersionId: efe02511-9b12-4274-9d1a-39e597d7fe3a
+```
+
+Status: PASS.
+
+### FF-02 — natural-language slot search
+
+Natural request through Claude:
+
+```text
+Найди мне завтра свободное окно на 60 минут с 9:00 до 18:00.
+```
+
+The client generated:
+
+```text
+start:            2026-09-09T09:00:00+02:00
+end:              2026-09-09T18:00:00+02:00
+duration_minutes: 60
+calendar_id:      primary
+```
+
+The connected calendar was empty, so the workflow returned the entire 09:00–18:00 interval as available. Claude explained that any one-hour slot inside the interval could be used.
+
+Status: PASS.
+
+### FF-03 — audit lifecycle
+
+Production audit evidence:
+
+```text
+tool_name:   find_free_time
+status:      succeeded
+duration_ms: 640
+```
+
+The stored sanitized arguments match the accepted request window and duration.
+
+Status: PASS.
+
+## Gateway regression — GW-01
+
+After the successful `find_free_time` E2E, the current published `MCP — Server` was inspected directly.
+
+Published version:
+
+```text
+workflow_id:       dSohghXnQp078EZm
+version_id:        db01b624-5108-4998-8a53-fd12680c9d25
+active_version_id: db01b624-5108-4998-8a53-fd12680c9d25
+```
+
+Observed tool surface:
+
+```text
+find_free_time
+get_email_attachment
+get_github_file
+get_job_details
+get_recent_jobs
+read_drive_file
+search_drive_files
+search_emails
+```
+
+`get_calendar_events` is missing even though it previously passed full acceptance and its sub-workflow remains active.
+
+Expected result for GW-01:
+
+```text
+Both get_calendar_events and find_free_time are present in the same published MCP Server version.
+```
+
+Current status: FAIL — recovery pending.
+
+The accepted repository export `n8n/MCP_SERVER.json` intentionally remains unchanged because it preserves the last accepted `get_calendar_events` configuration needed for restoration.
+
+Recovery instructions and exact accepted node configuration are documented in `docs/MCP_SERVER_REGRESSION_2026-09-08.md`.
 
 ## Runtime upgrade acceptance
 
@@ -315,4 +404,8 @@ At minimum:
 - Drive read preserves explicit truncation metadata;
 - Drive missing files normalize to `NOT_FOUND`;
 - unsupported Drive binary types normalize to `UNSUPPORTED_FILE_TYPE`;
+- Calendar read tools use the dedicated `calendar.readonly` credential;
+- FreeBusy per-calendar errors are not treated as successful free-time responses;
+- adding one MCP Server tool must not remove previously accepted tool nodes;
+- after any MCP Server edit, the complete expected tool surface must be verified before milestone closure;
 - working production credentials or SQL are not deliberately broken to force error tests.
