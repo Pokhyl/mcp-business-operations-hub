@@ -48,7 +48,7 @@ The complete tool surface was re-verified after the latest gateway edit; no prev
 - M0 — Foundation: complete
 - M1 — Production cleanup: complete
 - M2 — Google Workspace expansion: complete
-- M3 — CRM integration: in progress; manager analytics deployed and awaiting final natural-language client acceptance for the four newest tools
+- M3 — CRM integration: in progress; all current CRM tools are deployed and natural-language accepted, with only the final cross-system customer context demo remaining before closure
 
 Detailed Calendar evidence is in `docs/CALENDAR_ACCEPTANCE.md`, `docs/FIND_FREE_TIME_ACCEPTANCE.md`, and `docs/ACCEPTANCE_TESTS.md`.
 
@@ -277,17 +277,19 @@ conversion_percent_excluding_duplicates: 15.80
 successful_payments_total:      82760
 ```
 
+Natural-language client acceptance passed on 2026-09-09.
+
 ### `get_manager_lead_stats`
 
 Workflow: `MCP — KeyCRM Manager Lead Stats` (`KcrmMgrLeadStatsA1`).
 
-Returns raw and duplicate-excluded lead totals plus source, pipeline, and status breakdowns.
+Returns raw and duplicate-excluded lead totals plus source, pipeline, and status breakdowns. Natural-language client acceptance passed on 2026-09-09.
 
 ### `get_manager_assignment_history`
 
 Workflow: `MCP — KeyCRM Manager Assignment History` (`KcrmMgrAssignHistA1`).
 
-Returns observed manager/source changes from `tracking_started_at`, with explicit coverage metadata and 15-minute observation cadence.
+Returns observed manager/source changes from `tracking_started_at`, with explicit coverage metadata and 15-minute observation cadence. Natural-language client acceptance passed on 2026-09-09 within the documented tracking boundary.
 
 ### `get_manager_call_timeline`
 
@@ -302,6 +304,8 @@ longest_gap_minutes:          41.2
 gaps_over_15_minutes:           6
 gaps_over_30_minutes:           1
 ```
+
+Natural-language client acceptance passed on 2026-09-09.
 
 ## Security state
 
@@ -325,13 +329,14 @@ Key KeyCRM files include:
 
 ## Exact next step
 
-Run natural-language MCP-client acceptance for the four newest analytics tools, for example:
+Run the final cross-system customer context demo through the real MCP client. The expected model-driven tool chain is:
 
 ```text
-Какая конверсия у Илоны за август?
-Сколько заявок получила Илона в августе и из каких каналов?
-Какие заявки переназначили на Илону после начала отслеживания?
-Какие перерывы между звонками делает Илона сегодня?
+search_customers
+-> get_customer_details
+-> use the customer's current email/contact context
+-> search_emails
+-> return one combined answer grounded in CRM + Gmail
 ```
 
-Low-level production workflow acceptance for all four already passes.
+After this client-level cross-system demo passes, record the result and close M3.
