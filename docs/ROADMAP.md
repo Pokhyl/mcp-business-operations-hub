@@ -40,7 +40,7 @@ Detailed M2 evidence is recorded in the Calendar, Drive, and acceptance document
 
 ## M3 — CRM integration
 
-Status: in progress; CRM read and manager analytics capabilities are deployed and client-accepted. Only the final cross-system context demo remains before closure.
+Status: in progress; CRM search/details and manager analytics are deployed and client-accepted. CRM-native customer communications must be resolved before closure.
 
 - [x] Select KeyCRM and define the read-only boundary
 - [x] Create local PostgreSQL customer search index
@@ -69,7 +69,12 @@ Status: in progress; CRM read and manager analytics capabilities are deployed an
 - [x] Verify the full M0-M3 tool surface after the latest gateway edit
 - [x] Low-level production acceptance for all four manager analytics tools
 - [x] Natural-language MCP-client acceptance for the four newest manager analytics tools
-- [ ] Final cross-system customer context demo and M3 closure
+- [x] Fix `search_emails` zero-result behavior and redact Gmail search audit query
+- [ ] Verify official/stable KeyCRM read access to customer communications stored in CRM
+- [ ] If supported, implement and publish a CRM-native `get_customer_communications` read tool
+- [ ] Natural-language acceptance for CRM-native customer communication history
+- [ ] Final customer-context demo using CRM communications as the primary source
+- [ ] M3 closure
 
 Current production CRM gateway includes:
 
@@ -84,11 +89,22 @@ get_manager_assignment_history
 get_manager_call_timeline
 ```
 
+Important architecture rule for the remaining M3 work:
+
+```text
+"show communication/history with this customer"
+-> KeyCRM customer
+-> KeyCRM-native communications first
+```
+
+`search_emails` remains a separate Gmail capability for explicit Gmail/mailbox questions and should not be treated as the primary source of CRM communication history.
+
 Detailed evidence:
 
 - `docs/M3_KEYCRM_ACCEPTANCE.md`
 - `docs/M3_MANAGER_STATS_ACCEPTANCE.md`
 - `docs/M3_MANAGER_ANALYTICS_ACCEPTANCE.md`
+- `docs/NEXT_CHAT_HANDOFF_2026-09-09.md`
 
 ## M4 — Controlled writes
 
