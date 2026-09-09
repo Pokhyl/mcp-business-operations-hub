@@ -48,7 +48,7 @@ Status: complete.
 
 `find_free_time` uses Google Calendar FreeBusy, validates per-calendar errors, merges busy intervals, computes qualifying free windows, finalizes audit state, and is accepted through natural-language MCP requests.
 
-A Calendar gateway regression discovered on 2026-09-08 temporarily removed `get_calendar_events` from the aggregate MCP Server after `find_free_time` was added. The tool was restored and both Calendar tools are now present together in active MCP Server version `07843872-4ab5-46f1-8df9-9a6bc8418673`.
+A Calendar gateway regression discovered on 2026-09-08 temporarily removed `get_calendar_events` from the aggregate MCP Server after `find_free_time` was added. The tool was restored and both Calendar tools are now present together.
 
 Final post-recovery natural-language regression acceptance passed on 2026-09-09:
 
@@ -61,11 +61,27 @@ During Drive acceptance, n8n `2.33.3` incorrectly routed a Google Drive 404 thro
 
 ## M3 — CRM integration
 
-Status: next milestone.
+Status: in progress; low-level production acceptance complete, client-level demo pending.
 
-- [ ] Read-only customer search
-- [ ] Customer details
-- [ ] Cross-system customer context demo
+- [x] Select KeyCRM as CRM provider and define the read-only boundary
+- [x] Create local PostgreSQL customer search index
+- [x] Complete one-time KeyCRM bootstrap without unstable page scanning
+- [x] Add scheduled incremental synchronization with `updated_between`
+- [x] Keep KeyCRM as source of truth and store only minimal search fields locally
+- [x] `search_customers(query, limit)`
+- [x] `get_customer_details(buyer_id)`
+- [x] Expose both CRM tools through the aggregate `MCP — Server`
+- [x] Verify the complete M0-M3 tool surface after the gateway edit
+- [x] Verify search uses the read-only PostgreSQL role
+- [ ] Natural-language cross-system customer context demo through the real MCP client
+
+The initial customer bootstrap loaded 24,118 unique buyers with no duplicate `buyer_id` values. The permanent incremental workflow runs every 15 minutes and has already passed a real automatic trigger execution.
+
+`search_customers` reads the synchronized local index and supports name/partial name, email, phone, and buyer ID. Search arguments are redacted in audit storage because they may contain PII.
+
+`get_customer_details` uses the selected `buyer_id` to fetch the current full customer record directly from KeyCRM.
+
+Detailed evidence, the permission defect discovered during acceptance, synchronization behavior, workflow IDs, production versions, and current MCP Server surface are recorded in `docs/M3_KEYCRM_ACCEPTANCE.md`.
 
 ## M4 — Controlled writes
 
