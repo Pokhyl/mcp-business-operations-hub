@@ -40,7 +40,7 @@ Detailed M2 evidence is recorded in the Calendar, Drive, and acceptance document
 
 ## M3 — CRM integration
 
-Status: in progress; CRM search/details and manager analytics are deployed and client-accepted. CRM-native customer communications must be resolved before closure.
+Status: in progress; CRM search/details and manager analytics are deployed and client-accepted. Official CRM-native communication-history access was investigated on 2026-09-09 and is not exposed by the current public keyCRM OpenAPI. M3 remains open; no unsupported/private communications implementation is allowed.
 
 - [x] Select KeyCRM and define the read-only boundary
 - [x] Create local PostgreSQL customer search index
@@ -70,10 +70,11 @@ Status: in progress; CRM search/details and manager analytics are deployed and c
 - [x] Low-level production acceptance for all four manager analytics tools
 - [x] Natural-language MCP-client acceptance for the four newest manager analytics tools
 - [x] Fix `search_emails` zero-result behavior and redact Gmail search audit query
-- [ ] Verify official/stable KeyCRM read access to customer communications stored in CRM
-- [ ] If supported, implement and publish a CRM-native `get_customer_communications` read tool
-- [ ] Natural-language acceptance for CRM-native customer communication history
-- [ ] Final customer-context demo using CRM communications as the primary source
+- [x] Verify official/stable KeyCRM read access to customer communications stored in CRM — result: unsupported by current public OpenAPI v1.2.0
+- [x] Verify documented keyCRM webhook surface for a supported message-event fallback — result: only order/payment/lead-status events; no chat/message event
+- [ ] `get_customer_communications` — blocked: no official/stable provider read endpoint; do not implement against guessed/private UI APIs
+- [ ] Natural-language acceptance for CRM-native customer communication history — blocked by provider API boundary
+- [ ] Final customer-context behavior/demo — must not silently substitute Gmail for generic CRM communication history
 - [ ] M3 closure
 
 Current production CRM gateway includes:
@@ -93,13 +94,18 @@ Important architecture rule for the remaining M3 work:
 
 ```text
 "show communication/history with this customer"
--> KeyCRM customer
--> KeyCRM-native communications first
+-> resolve customer in KeyCRM
+-> use KeyCRM-native communications only if/when a supported public interface exists
+-> otherwise report the provider limitation; do not silently route to Gmail
 ```
 
-`search_emails` remains a separate Gmail capability for explicit Gmail/mailbox questions and should not be treated as the primary source of CRM communication history.
+`search_emails` remains a separate Gmail capability for explicit Gmail/mailbox questions.
 
-Detailed evidence:
+Communications API evidence:
+
+- `docs/M3_KEYCRM_COMMUNICATIONS_API.md`
+
+Other detailed evidence:
 
 - `docs/M3_KEYCRM_ACCEPTANCE.md`
 - `docs/M3_MANAGER_STATS_ACCEPTANCE.md`
@@ -107,6 +113,8 @@ Detailed evidence:
 - `docs/NEXT_CHAT_HANDOFF_2026-09-09.md`
 
 ## M4 — Controlled writes
+
+Do not start until M3 is explicitly closed.
 
 - [ ] Separate write-tool class
 - [ ] Explicit user approval requirement
