@@ -170,6 +170,63 @@ public.keycrm_sync_state
 
 The overlap provides at-least-once synchronization around the boundary; UPSERT by `buyer_id` makes repeats safe.
 
+### Customer communications boundary
+
+A customer communication/history request is semantically a KeyCRM question when the requested correspondence is the history visible in the CRM itself. Gmail is not a substitute for that CRM-native history.
+
+The desired architecture remains:
+
+```text
+customer communication/history request
+ -> resolve customer in KeyCRM
+ -> read KeyCRM-native communications through an official stable interface
+ -> normalize and return
+```
+
+However, the official-interface investigation performed on 2026-09-09 established that the current public keyCRM OpenAPI v1.2.0 does not expose a communications/chat/message/conversation read resource.
+
+The documented `GET /buyer/{buyerId}` includes are limited to:
+
+```text
+manager
+shipping
+company
+loyalty
+custom_fields
+```
+
+No communication-history include exists.
+
+The official outgoing webhook documentation currently exposes only:
+
+```text
+order.change_order_status
+order.change_payment_status
+lead.change_lead_status
+```
+
+There is no documented chat/message event suitable for a supported communication mirror.
+
+Therefore the production boundary is currently:
+
+```text
+explicit Gmail/mailbox request
+ -> search_emails
+ -> Gmail API
+
+CRM communication-history request
+ -> do not silently substitute Gmail
+ -> report that current public keyCRM API does not expose CRM-native history
+```
+
+`get_customer_communications` must not be implemented against guessed paths, scraped UI content, or private/internal UI endpoints without a separate explicit architecture/security decision.
+
+Evidence is recorded in:
+
+```text
+docs/M3_KEYCRM_COMMUNICATIONS_API.md
+```
+
 ## KeyCRM manager analytics
 
 Manager sales/lead analytics are based on KeyCRM pipeline cards, not `/order`.
@@ -243,7 +300,7 @@ Schedule every 15 minutes
  -> load pipeline_cards_incremental checkpoint
  -> subtract 2-minute overlap
  -> GET /pipelines/cards with filter[updated_between]
- -> paginate at limit=50 with 4000 ms request interval
+ -> paginate with limit=50 and 4000 ms request interval
  -> compare previous local manager_id/source_id
  -> record observed assignment/source changes
  -> UPSERT changed cards
@@ -336,6 +393,8 @@ Current business read tools include:
 - `get_manager_assignment_history`
 - `get_manager_call_timeline`
 
+There is currently no `get_customer_communications` tool because the official provider does not expose a supported read operation for CRM-native message history.
+
 Future write examples remain a separate class:
 
 - `send_email`
@@ -378,3 +437,4 @@ Detailed production evidence is recorded in:
 - `docs/M3_KEYCRM_ACCEPTANCE.md`
 - `docs/M3_MANAGER_STATS_ACCEPTANCE.md`
 - `docs/M3_MANAGER_ANALYTICS_ACCEPTANCE.md`
+- `docs/M3_KEYCRM_COMMUNICATIONS_API.md`
