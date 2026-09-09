@@ -27,13 +27,9 @@ Status: complete.
 
 Centralized audit logging is deployed through `MCP — Audit Tool Call` and wired into the current read tools.
 
-Audit argument redaction is centralized before PostgreSQL storage. Gmail search queries are always redacted, credential/session-style argument keys are recursively redacted, and historical raw Gmail audit queries were backfilled with migration `002_redact_existing_email_audit_queries.sql`.
-
-Production acceptance evidence and regression rules are documented in `docs/ACCEPTANCE_TESTS.md`.
-
 ## M2 — Google Workspace expansion
 
-Status: in progress — final post-recovery gateway regression acceptance pending.
+Status: complete.
 
 - [x] `get_email_attachment`
 - [x] `search_drive_files`
@@ -41,24 +37,31 @@ Status: in progress — final post-recovery gateway regression acceptance pendin
 - [x] `get_calendar_events`
 - [x] `find_free_time`
 - [x] Restore both accepted Calendar tools simultaneously in the published `MCP — Server` surface
-- [ ] Rerun one natural-language gateway regression request for `get_calendar_events`
-- [ ] Rerun one natural-language gateway regression request for `find_free_time`
+- [x] Rerun natural-language gateway regression request for `get_calendar_events`
+- [x] Rerun natural-language gateway regression request for `find_free_time`
 
-`get_email_attachment` is deployed as a read-only MCP tool. The public contract is `message_id` plus optional `filename`; Gmail `attachmentId` is discovered internally and is never required from the user.
+`get_email_attachment` is deployed as a read-only MCP tool. Gmail `attachmentId` is discovered internally and is never required from the user.
 
-`search_drive_files` is deployed with a dedicated Google Drive `drive.readonly` OAuth credential and supports natural filename/full-text search with normalized metadata results.
+`search_drive_files` and `read_drive_file` are deployed through the dedicated Google Drive `drive.readonly` OAuth credential. Search, file reading, normalized errors, and natural cross-tool acceptance are complete.
 
-`read_drive_file` is deployed and supports Google Docs, Sheets, Slides, PDF, and text files. Low-level and natural-language cross-tool acceptance are complete.
+`get_calendar_events` is deployed through the dedicated Google Calendar `calendar.readonly` OAuth credential. Low-level validation, provider 404 -> `NOT_FOUND`, audit lifecycle, and natural-language calendar queries are accepted.
 
-`get_calendar_events` implementation, low-level acceptance, audit verification, MCP exposure, and natural-language client acceptance are complete. Natural-language checks covered week, month, and year windows against the real primary calendar.
+`find_free_time` uses Google Calendar FreeBusy, validates per-calendar errors, merges busy intervals, computes qualifying free windows, finalizes audit state, and is accepted through natural-language MCP requests.
 
-`find_free_time` is implemented with Google Calendar FreeBusy, published, exposed, and accepted through a natural-language MCP client request. A real request for a 60-minute slot on 2026-09-09 from 09:00 to 18:00 produced the expected free window and a succeeded audit row with `duration_ms=640`.
+A Calendar gateway regression discovered on 2026-09-08 temporarily removed `get_calendar_events` from the aggregate MCP Server after `find_free_time` was added. The tool was restored and both Calendar tools are now present together in active MCP Server version `07843872-4ab5-46f1-8df9-9a6bc8418673`.
 
-A Calendar gateway regression found during post-acceptance inspection on 2026-09-08 has been structurally recovered: `get_calendar_events` and `find_free_time` are again present together in the same active `MCP — Server` version (`07843872-4ab5-46f1-8df9-9a6bc8418673`), both are connected to `MCP Server Trigger`, and `n8n/MCP_SERVER.json` has been synchronized with that recovered production surface. The regression remains open only for the two final natural-language post-recovery checks documented in `docs/MCP_SERVER_REGRESSION_2026-09-08.md`.
+Final post-recovery natural-language regression acceptance passed on 2026-09-09:
+
+- `get_calendar_events`: request for 2026-09-10 returned the source-accurate empty calendar; audit `succeeded`, `duration_ms=606`.
+- `find_free_time`: request for a 60-minute slot on 2026-09-10 from 09:00 to 18:00 returned the source-accurate full free window; audit `succeeded`, `duration_ms=450`.
+
+The regression is closed in `docs/MCP_SERVER_REGRESSION_2026-09-08.md`.
 
 During Drive acceptance, n8n `2.33.3` incorrectly routed a Google Drive 404 through the HTTP Request success output despite `Continue (using error output)`. Production was backed up and upgraded to `2.37.10`; the same 404 now follows the correct error branch and normalizes to `NOT_FOUND`.
 
 ## M3 — CRM integration
+
+Status: next milestone.
 
 - [ ] Read-only customer search
 - [ ] Customer details
