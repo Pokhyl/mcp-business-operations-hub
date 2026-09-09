@@ -6,7 +6,11 @@ Last verified: 2026-09-09.
 
 Production n8n runtime: `2.37.10`.
 
-Production was upgraded from `2.33.3` after a Google Drive HTTP error-output routing defect. A full backup was created before the upgrade and the post-upgrade regression passed.
+Production n8n:
+
+```text
+https://publisher.hodor.com.pl
+```
 
 ## MCP gateway
 
@@ -23,40 +27,48 @@ Authentication: n8n OAuth2.
 
 Current published tool surface:
 
-- `get_github_file`
-- `get_recent_jobs`
-- `get_job_details`
-- `search_emails`
-- `get_email_attachment`
-- `search_drive_files`
-- `read_drive_file`
-- `get_calendar_events`
-- `find_free_time`
-- `search_customers`
-- `get_customer_details`
-- `get_manager_customer_stats`
-- `get_manager_call_stats`
-- `get_manager_sales_stats`
-- `get_manager_lead_stats`
-- `get_manager_assignment_history`
-- `get_manager_call_timeline`
+```text
+get_github_file
+get_recent_jobs
+get_job_details
+search_emails
+get_email_attachment
+search_drive_files
+read_drive_file
+get_calendar_events
+find_free_time
+search_customers
+get_customer_details
+get_manager_customer_stats
+get_manager_call_stats
+get_manager_sales_stats
+get_manager_lead_stats
+get_manager_assignment_history
+get_manager_call_timeline
+```
 
 The complete tool surface was re-verified after the latest gateway edit; no previously accepted tool was removed.
 
 ## Milestones
 
-- M0 — Foundation: complete
-- M1 — Production cleanup: complete
-- M2 — Google Workspace expansion: complete
-- M3 — CRM integration: in progress; all current CRM tools are deployed and natural-language accepted, with only the final cross-system customer context demo remaining before closure
+```text
+M0 Foundation                 complete
+M1 Production cleanup         complete
+M2 Google Workspace expansion complete
+M3 CRM integration            in progress
+M4 Controlled writes          not started
+M5 Portfolio hardening        not started
+```
 
-Detailed Calendar evidence is in `docs/CALENDAR_ACCEPTANCE.md`, `docs/FIND_FREE_TIME_ACCEPTANCE.md`, and `docs/ACCEPTANCE_TESTS.md`.
+M3 CRM search/details, customer/manager counts, call statistics, sales/lead analytics, observed reassignment history, and call timeline are already deployed. The newest four manager analytics tools passed natural-language MCP-client acceptance on 2026-09-09.
 
-Detailed KeyCRM evidence is in:
+M3 is NOT closed yet because the final customer-context architecture must use KeyCRM-native customer communications where supported rather than treating Gmail as the primary communication history.
 
-- `docs/M3_KEYCRM_ACCEPTANCE.md`
-- `docs/M3_MANAGER_STATS_ACCEPTANCE.md`
-- `docs/M3_MANAGER_ANALYTICS_ACCEPTANCE.md`
+Detailed continuation instructions are in:
+
+```text
+docs/NEXT_CHAT_HANDOFF_2026-09-09.md
+```
 
 ## Normalized MCP contract
 
@@ -89,8 +101,6 @@ Error:
 }
 ```
 
-Current error codes include `INVALID_INPUT`, `NOT_FOUND`, `AMBIGUOUS_ATTACHMENT`, `AMBIGUOUS_MANAGER`, `UNSUPPORTED_FILE_TYPE`, and `UPSTREAM_ERROR`.
-
 Valid audited calls follow:
 
 ```text
@@ -102,21 +112,16 @@ validate
 -> return original MCP response
 ```
 
-`INVALID_INPUT` remains pre-audit. Finish-audit calls omit `arguments_json`. Gmail/customer/manager search arguments that may contain PII are redacted.
+Rules:
 
-## KeyCRM architecture
+- `INVALID_INPUT` remains pre-audit.
+- Finish-audit mappings omit `arguments_json` completely.
+- Sensitive Gmail/customer/manager search inputs are redacted.
+- No user-facing MCP tool currently writes to KeyCRM.
 
-KeyCRM API base URL:
+## KeyCRM customer index
 
-```text
-https://openapi.keycrm.app/v1
-```
-
-Credential: `KeyCRM MCP` Bearer authentication.
-
-KeyCRM remains the source of truth. No user-facing MCP tool writes to KeyCRM.
-
-### Local customer index
+KeyCRM remains the source of truth.
 
 Table:
 
@@ -124,38 +129,19 @@ Table:
 public.keycrm_customers
 ```
 
-Minimal stored fields:
-
-- `buyer_id`
-- `full_name`
-- `phones[]`
-- `emails[]`
-- `keycrm_updated_at`
-- `manager_id`
-- `synced_at`
-
-The local index intentionally excludes orders, notes, photos, conversations, and other full CRM data.
-
-Current production snapshot:
+Minimal fields:
 
 ```text
-total customers:       24226
-with manager_id:       21633
-without manager_id:     2593
+buyer_id
+full_name
+phones[]
+emails[]
+keycrm_updated_at
+manager_id
+synced_at
 ```
 
-Read-only PostgreSQL access uses n8n credential `mcp_read`, backed by role `mcp_readonly`:
-
-```text
-SELECT = true
-INSERT = false
-UPDATE = false
-DELETE = false
-```
-
-### Customer incremental sync
-
-Workflow:
+Permanent customer sync:
 
 ```text
 ADMIN — KeyCRM Customer Index Incremental Sync
@@ -164,51 +150,38 @@ status: active
 schedule: every 15 minutes
 ```
 
-It uses KeyCRM `filter[updated_between]`, `limit=50`, pagination, `4000 ms` between pages, a two-minute overlap on the previous successful checkpoint, deduplication by `buyer_id`, and UPSERT into the local index. `manager_id` is synchronized with every changed buyer.
+`search_customers` uses the local index for natural name/email/phone/ID lookup. `get_customer_details` performs a fresh KeyCRM GET after a `buyer_id` is known.
 
-Latest verified customer checkpoint:
+Read-only PostgreSQL access uses credential `mcp_read`, backed by role `mcp_readonly`.
+
+For business-read tables the verified boundary remains:
 
 ```text
-2026-09-09 18:45:05.162+00
-last_count: 1
+SELECT = true
+INSERT = false
+UPDATE = false
+DELETE = false
 ```
 
-## KeyCRM manager analytics index
+## KeyCRM manager analytics
 
-Lead/sales analytics use KeyCRM pipeline cards rather than `/order`.
-
-Main table:
+Pipeline-card analytics use:
 
 ```text
 public.keycrm_pipeline_cards
-```
-
-Reference tables:
-
-```text
 public.keycrm_pipelines
 public.keycrm_sources
 public.keycrm_users
 ```
 
-Observed reassignment tracking:
+Observed assignment tracking uses:
 
 ```text
 public.keycrm_pipeline_assignment_events
 public.keycrm_pipeline_tracking_meta
 ```
 
-Current verified pipeline-card index:
-
-```text
-local rows:       51782
-unique card_id:   51782
-live KeyCRM count at reconciliation: 51782
-```
-
-The initial page-based bootstrap completed successfully but concurrent inserts shifted page boundaries and left 22 historical cards absent from the first local snapshot. Provider/local counts were compared by `created_between`, the discrepancy was isolated to 2026-08-17 and 2026-08-20, and those exact records were fetched and UPSERTed. Final provider/local counts matched before the analytics tools were published.
-
-Permanent incremental workflow:
+Permanent pipeline-card sync:
 
 ```text
 ADMIN — KeyCRM Pipeline Card Index Incremental Sync
@@ -217,55 +190,20 @@ status: active
 schedule: every 15 minutes
 ```
 
-It reads a checkpoint with a two-minute overlap, requests changed cards with `filter[updated_between]`, detects observed `manager_id`/`source_id` changes, records reassignment events, UPSERTs changed cards, and advances the checkpoint only after a successful local write.
+The full bootstrap was reconciled against KeyCRM after shifting page boundaries caused 22 historical cards to be missed. The exact missing records were recovered and provider/local totals matched before the manager analytics tools were published.
 
-Latest verified post-restart run:
-
-```text
-last_count: 3
-local rows: 51782
-unique card_id: 51782
-```
-
-Assignment/source history is only reliable from:
+Natural-language accepted manager tools:
 
 ```text
-tracking_started_at: 2026-09-09T18:37:30.384Z
+get_manager_customer_stats
+get_manager_call_stats
+get_manager_sales_stats
+get_manager_lead_stats
+get_manager_assignment_history
+get_manager_call_timeline
 ```
 
-KeyCRM OpenAPI does not expose the historical assignment action log. The MCP tool explicitly reports this coverage limitation instead of reconstructing unsupported history.
-
-## KeyCRM MCP tools
-
-### `search_customers`
-
-Workflow: `MCP — KeyCRM Customer Search` (`yej0SNKc4Ovb4rzq`).
-
-Searches the synchronized local read-only index by full/partial name, email, phone, or `buyer_id`.
-
-### `get_customer_details`
-
-Workflow: `MCP — KeyCRM Customer Details` (`KcrmDetA9V7cQ2Lx`).
-
-Takes a positive `buyer_id` and performs a fresh `GET /buyer/{buyer_id}`.
-
-### `get_manager_customer_stats`
-
-Workflow: `MCP — KeyCRM Manager Customer Stats` (`KcrmMgrStatsA7pQ4Z`).
-
-The real MCP client natural-language acceptance passed on 2026-09-09. The count is point-in-time and continues to change with CRM assignments; the latest direct database snapshot for manager ID `4` is `3381`.
-
-### `get_manager_call_stats`
-
-Workflow: `MCP — KeyCRM Manager Call Stats` (`KcrmMgrCallStatsA9zQ7P`).
-
-Reads KeyCRM `/calls` for a resolved manager and explicit time window and returns total/incoming/outgoing/finished counts and duration.
-
-### `get_manager_sales_stats`
-
-Workflow: `MCP — KeyCRM Manager Sales Stats` (`KcrmMgrSalesStatsA1`).
-
-Low-level production acceptance for Ilona Kamuz, August 2026:
+Accepted August 2026 example for Ilona Kamuz:
 
 ```text
 total_leads_raw:                  646
@@ -277,25 +215,7 @@ conversion_percent_excluding_duplicates: 15.80
 successful_payments_total:      82760
 ```
 
-Natural-language client acceptance passed on 2026-09-09.
-
-### `get_manager_lead_stats`
-
-Workflow: `MCP — KeyCRM Manager Lead Stats` (`KcrmMgrLeadStatsA1`).
-
-Returns raw and duplicate-excluded lead totals plus source, pipeline, and status breakdowns. Natural-language client acceptance passed on 2026-09-09.
-
-### `get_manager_assignment_history`
-
-Workflow: `MCP — KeyCRM Manager Assignment History` (`KcrmMgrAssignHistA1`).
-
-Returns observed manager/source changes from `tracking_started_at`, with explicit coverage metadata and 15-minute observation cadence. Natural-language client acceptance passed on 2026-09-09 within the documented tracking boundary.
-
-### `get_manager_call_timeline`
-
-Workflow: `MCP — KeyCRM Manager Call Timeline` (`KcrmMgrCallTimelineA1`).
-
-Low-level acceptance for Ilona on 2026-09-09:
+Accepted call-timeline example:
 
 ```text
 total_calls:                    78
@@ -305,38 +225,106 @@ gaps_over_15_minutes:           6
 gaps_over_30_minutes:           1
 ```
 
-Natural-language client acceptance passed on 2026-09-09.
+## Assignment-history limitation
 
-## Security state
+KeyCRM UI stores an Action History, but the public KeyCRM OpenAPI does not currently expose the historical assignment action log used by the UI.
 
-- External credentials stay in n8n credential storage.
-- Drive and Calendar use dedicated read-only OAuth scopes.
-- KeyCRM user-facing tools perform GET/read operations only.
-- Internal synchronization writes only to local PostgreSQL infrastructure tables.
-- Business-read tools use the read-only PostgreSQL role.
-- No write-capable business tool is exposed through MCP.
+Therefore `get_manager_assignment_history` is deliberately snapshot-based. It observes manager/source changes every 15 minutes from:
 
-## Repository state
+```text
+tracking_started_at: 2026-09-09T18:37:30.384Z
+```
 
-Key KeyCRM files include:
+It does not claim to know the historical initiator of a reassignment or reconstruct unsupported history before the tracking boundary.
 
-- `docs/M3_KEYCRM_ACCEPTANCE.md`
-- `docs/M3_MANAGER_STATS_ACCEPTANCE.md`
-- `docs/M3_MANAGER_ANALYTICS_ACCEPTANCE.md`
-- `database/migrations/003_keycrm_customer_index.sql`
-- `database/migrations/004_keycrm_manager_id.sql`
-- `database/migrations/005_keycrm_manager_analytics.sql`
+## Gmail search fix
 
-## Exact next step
+Workflow:
 
-Run the final cross-system customer context demo through the real MCP client. The expected model-driven tool chain is:
+```text
+MCP — Gmail Search
+workflow_id: tUxRIiXHh2UaWflF
+active_version_id: 98f525fe-84ed-486b-a013-163b5ad0f778
+status: active
+```
+
+A real cross-system test exposed a zero-result defect: when Gmail returned zero messages, the workflow emitted no MCP response.
+
+Production fix:
+
+```text
+Get many messages (alwaysOutputData=true)
+-> Has messages?
+   true  -> Get a message -> normal response
+   false -> success=true, data=[], count=0
+```
+
+The Gmail search query in audit start is now stored as `[REDACTED]`.
+
+Current production export is synchronized to:
+
+```text
+n8n/gmail/SEARCH_EMAILS.json
+```
+
+`search_emails` reads the connected Gmail mailbox directly. It remains a valid independent Gmail tool.
+
+## Customer communications architecture — important
+
+The previous intended final M3 demo was:
 
 ```text
 search_customers
 -> get_customer_details
--> use the customer's current email/contact context
+-> take email
 -> search_emails
--> return one combined answer grounded in CRM + Gmail
+-> combine CRM + Gmail
 ```
 
-After this client-level cross-system demo passes, record the result and close M3.
+That is not the correct default for a request such as `show the communication/history with this customer` because KeyCRM itself contains customer communication history, including email and other connected channels in the CRM UI.
+
+Correct architectural direction:
+
+```text
+customer communication/history request
+-> resolve customer in KeyCRM
+-> read KeyCRM-native communications first, if supported by an official/stable API
+-> use Gmail only for explicit Gmail/mailbox questions or as an additional source when requested
+```
+
+Do not assume that because the KeyCRM UI shows messages, the public API necessarily exposes them. The next step must verify supported API access first.
+
+## Security state
+
+- External credentials remain in n8n credential storage.
+- Drive and Calendar use dedicated read-only OAuth scopes.
+- Current KeyCRM user-facing tools use GET/read operations only.
+- Internal synchronization writes only to local PostgreSQL infrastructure tables.
+- Business-read tools use `mcp_readonly`.
+- No write-capable business tool is exposed through MCP.
+
+## Repository evidence
+
+Key files:
+
+```text
+docs/ROADMAP.md
+docs/ARCHITECTURE.md
+docs/MCP_TOOLS.md
+docs/M3_KEYCRM_ACCEPTANCE.md
+docs/M3_MANAGER_STATS_ACCEPTANCE.md
+docs/M3_MANAGER_ANALYTICS_ACCEPTANCE.md
+docs/NEXT_CHAT_HANDOFF_2026-09-09.md
+database/migrations/003_keycrm_customer_index.sql
+database/migrations/004_keycrm_manager_id.sql
+database/migrations/005_keycrm_manager_analytics.sql
+n8n/gmail/SEARCH_EMAILS.json
+```
+
+## Exact next step
+
+Before closing M3, research the current official KeyCRM API and verify with safe GET-only probes whether customer communications stored in KeyCRM are accessible through a supported stable interface, including emails/chats/messages and their relation to buyer/lead IDs.
+
+If supported, implement a universal read-only customer-communications tool and then rerun the final natural-language customer-context demo with KeyCRM communications as the primary source.
+
+If not supported, document the limitation explicitly before considering any other architecture.
