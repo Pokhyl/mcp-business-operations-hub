@@ -4,23 +4,23 @@ Last verified: 2026-09-09.
 
 ## Goal
 
-Add a read-only MCP capability for questions such as:
+Provide a read-only MCP capability for natural-language questions such as:
 
 ```text
 Сколько всего клиентов у менеджера Анастасия Быкова?
 ```
 
-The implementation must not scan the entire KeyCRM customer base per request and must not introduce CRM write access.
+The implementation must not scan the full KeyCRM buyer dataset on every request and must not expose CRM write access.
 
-## Data model extension
+## Data model
 
-`public.keycrm_customers` now stores the minimal additional field:
+`public.keycrm_customers` stores the minimal search fields plus:
 
 ```text
 manager_id bigint
 ```
 
-An index was added:
+Index:
 
 ```text
 idx_keycrm_customers_manager_id
@@ -32,7 +32,7 @@ Migration:
 database/migrations/004_keycrm_manager_id.sql
 ```
 
-The read-only PostgreSQL role remains read-only:
+The user-facing PostgreSQL credential remains read-only:
 
 ```text
 SELECT = true
@@ -41,67 +41,26 @@ UPDATE = false
 DELETE = false
 ```
 
-## Backfill
+The full bootstrap and permanent 15-minute incremental synchronization both persist `manager_id`.
 
-The original successful full bootstrap execution `16711` already contained the KeyCRM `manager_id` values in the provider responses. Those verified responses were used once to backfill the existing index instead of consuming hundreds of additional KeyCRM API requests.
+## Manager resolution
 
-Bootstrap snapshot extraction:
-
-```text
-buyers:          24118
-unique buyers:   24118
-with manager_id: 21525
-without manager: 2593
-```
-
-After applying the current incremental window, the production index contained:
-
-```text
-total customers:      24183
-with manager_id:      21590
-without manager_id:    2593
-distinct manager IDs:    23
-```
-
-The permanent incremental synchronization was updated so every changed buyer now UPSERTs `manager_id` together with the existing minimal search fields.
-
-Workflow:
-
-```text
-ADMIN — KeyCRM Customer Index Incremental Sync
-workflow_id: KCIuipW0TTnCMxkY
-version_id: 3d9e505c-ce68-4bdd-9530-1c77838275e0
-status: active
-```
-
-The one-time/full bootstrap normalizer was also updated so a future rebuild includes `manager_id` from the start.
-
-## KeyCRM users endpoint
-
-The official read-only KeyCRM users endpoint is used to resolve manager identities:
+The workflow resolves managers through the read-only KeyCRM users endpoint:
 
 ```text
 GET /users
 filter[status]=active
 ```
 
-A production probe returned 22 active users. KeyCRM documents that user IDs are used as `manager_id` values.
+Natural manager names are matched with Cyrillic/Latin transliteration-aware fuzzy comparison. Ambiguous matches are rejected instead of silently selecting a user.
 
 ## MCP tool
 
-Workflow:
-
 ```text
-MCP — KeyCRM Manager Customer Stats
+Tool:        get_manager_customer_stats
+Workflow:    MCP — KeyCRM Manager Customer Stats
 workflow_id: KcrmMgrStatsA7pQ4Z
-version_id: de05e569-d799-4bb4-b504-31d645447c18
-status: active
-```
-
-Tool name:
-
-```text
-get_manager_customer_stats
+status:      active
 ```
 
 Input:
@@ -118,26 +77,23 @@ Execution path:
 validate
  -> audit start
  -> GET active KeyCRM users
- -> resolve manager name
+ -> resolve manager
  -> read-only PostgreSQL count by manager_id
- -> normalize result
+ -> normalize
  -> audit finish
- -> return MCP response
+ -> return
 ```
 
-Manager resolution supports Cyrillic/Latin transliteration and fuzzy full-name comparison. Ambiguous matches are rejected instead of silently selecting a manager.
+Manager-name audit arguments are redacted.
 
-Manager-name audit arguments are stored as `[REDACTED]`.
+## Production acceptance
 
-## Low-level production acceptance
-
-Russian manager name:
+Low-level production test:
 
 ```text
 input:          Анастасия Быкова
 resolved user:  Anastasiia Bykova
 manager_id:     4
-customer_count: 3383
 success:        true
 ```
 
@@ -148,39 +104,16 @@ unknown manager -> NOT_FOUND
 one-character input -> INVALID_INPUT
 ```
 
-The success path reads the count through the existing `mcp_read` credential backed by PostgreSQL role `mcp_readonly`.
+## Natural-language MCP-client acceptance
 
-## MCP Server integration
+PASS on 2026-09-09.
 
-Aggregate workflow:
-
-```text
-MCP — Server
-workflow_id: dSohghXnQp078EZm
-version_id: 0387a555-2f3b-4738-86ab-6bcda77ee838
-active_version_id: 0387a555-2f3b-4738-86ab-6bcda77ee838
-status: active
-```
-
-The complete published tool surface was re-verified after this edit:
+The real MCP client was asked:
 
 ```text
-find_free_time
-get_calendar_events
-get_customer_details
-get_email_attachment
-get_github_file
-get_job_details
-get_manager_customer_stats
-get_recent_jobs
-read_drive_file
-search_customers
-search_drive_files
-search_emails
+сколько всего клиентов у менеджера Анастасия Быкова
 ```
 
-No previously accepted tool was removed.
+The client selected the manager-statistics tool and returned the current PostgreSQL count. The point-in-time count was `3382`; the value is expected to change as KeyCRM assignments change and the 15-minute synchronization runs.
 
-## Remaining acceptance
-
-The low-level tool and aggregate gateway integration are accepted. A final natural-language request through the real MCP client should confirm that the client selects `get_manager_customer_stats` for a manager-count question and returns the source-accurate count.
+This closes the remaining client-level acceptance for `get_manager_customer_stats`.
