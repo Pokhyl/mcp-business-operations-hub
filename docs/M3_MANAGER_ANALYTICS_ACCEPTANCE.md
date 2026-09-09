@@ -304,9 +304,9 @@ validate
 
 Finish-audit mappings omit `arguments_json`.
 
-## Remaining client-level acceptance
+## Natural-language MCP-client acceptance
 
-Low-level production acceptance is complete. The remaining check is natural-language selection through the real MCP client for the four new analytics tools. Example prompts:
+Client-level acceptance passed on 2026-09-09. The user tested all four production prompts through the real MCP client and confirmed that the answers were correct:
 
 ```text
 Какая конверсия у Илоны за август?
@@ -314,3 +314,18 @@ Low-level production acceptance is complete. The remaining check is natural-lang
 Какие заявки переназначили на Илону после начала отслеживания?
 Какие перерывы между звонками делает Илона сегодня?
 ```
+
+Result:
+
+```text
+get_manager_sales_stats        PASS
+get_manager_lead_stats         PASS
+get_manager_assignment_history PASS
+get_manager_call_timeline      PASS
+```
+
+Manager reassignment acceptance is bounded by the documented `tracking_started_at` limitation; no unsupported historical Action History is inferred.
+
+## Remaining M3 acceptance
+
+Manager analytics is accepted end-to-end. The only remaining M3 acceptance item is the final cross-system customer context demo.
