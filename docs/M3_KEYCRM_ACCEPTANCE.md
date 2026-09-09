@@ -235,31 +235,88 @@ Aggregate workflow:
 ```text
 MCP — Server
 workflow_id: dSohghXnQp078EZm
-version_id: fcfb4961-f40e-44b6-b2de-627c31f87bea
-active_version_id: fcfb4961-f40e-44b6-b2de-627c31f87bea
-status: active
 ```
 
-The complete published tool surface was verified after the M3 change:
+The current published tool surface contains 17 tools and includes all accepted M0-M3 read tools. The communications investigation made no MCP Server change, so no tool was added or removed during that work.
+
+## CRM-native communications investigation
+
+The final customer-context demo exposed that a generic request for `communication/history with this customer` must not be implemented as `customer -> email -> Gmail` by default. KeyCRM itself contains multi-channel communication history in its UI.
+
+The supported-interface investigation was completed on 2026-09-09 against the current official KeyCRM OpenAPI documentation and the exact `api.yaml` loaded by that documentation.
+
+Result:
 
 ```text
-find_free_time
-get_calendar_events
-get_customer_details
-get_email_attachment
-get_github_file
-get_job_details
-get_recent_jobs
-read_drive_file
-search_customers
-search_drive_files
-search_emails
+public OpenAPI communications read endpoint: NOT AVAILABLE
+buyer communications include:              NOT AVAILABLE
+chat/message webhook event:                 NOT AVAILABLE
 ```
 
-This explicitly verifies that adding the CRM tools did not remove any previously accepted M0-M2 tool.
+The current public OpenAPI v1.2.0 contains no documented path for:
+
+```text
+communications
+chats
+messages
+conversations
+email history
+WhatsApp message history
+Instagram message history
+```
+
+The documented `GET /buyer/{buyerId}` associations are limited to:
+
+```text
+manager
+shipping
+company
+loyalty
+custom_fields
+```
+
+The official outgoing webhook documentation currently lists only:
+
+```text
+order.change_order_status
+order.change_payment_status
+lead.change_lead_status
+```
+
+No guessed `/messages` or `/chats` request was treated as an API probe because no such route is present in the official specification. No private/internal keyCRM UI endpoint was introduced.
+
+Detailed evidence is recorded in:
+
+```text
+docs/M3_KEYCRM_COMMUNICATIONS_API.md
+```
+
+## Communications acceptance decision
+
+`get_customer_communications` is not accepted for implementation against the current public API because there is no supported provider operation behind it.
+
+Current correct behavior boundary:
+
+```text
+explicit Gmail/mailbox question
+-> search_emails
+-> Gmail
+
+customer communication/history in CRM
+-> do not silently substitute Gmail
+-> provider limitation must be stated until a supported KeyCRM interface exists
+```
+
+No production workflow was changed for this result. This preserves the existing security/read-only boundary and avoids an unsupported private-API dependency.
 
 ## Remaining M3 acceptance
 
-Low-level production acceptance for customer synchronization, `search_customers`, `get_customer_details`, audit behavior, and aggregate MCP Server presence is complete.
+Low-level production acceptance for customer synchronization, `search_customers`, `get_customer_details`, audit behavior, manager analytics, and the aggregate MCP Server is complete.
 
-The remaining M3 item is the natural-language cross-system customer-context demo through the real MCP client. M3 should not be marked fully complete until that client-level demo passes.
+The official CRM-native communications API investigation is also complete, with the result `unsupported by current public OpenAPI`.
+
+M3 is intentionally **not** marked complete yet. The remaining decision is how the project closes M3 under this provider limitation. Until that is explicitly resolved:
+
+- do not implement a private/UI communications workaround;
+- do not silently substitute Gmail for generic CRM communication history;
+- do not start M4 Controlled Writes.
