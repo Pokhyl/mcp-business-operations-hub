@@ -29,9 +29,10 @@ Gmail workflows       Drive workflows  Calendar workflows  GitHub workflow   CRM
    v                      v                v                   v                  v
 Gmail API             Drive API       Calendar API         GitHub API       KeyCRM API
                                                                                  |
-                                                                                 | incremental read sync
-                                                                                 v
-                                                                       PostgreSQL customer index
+                                                        +------------------------+------------------+
+                                                        |                                           |
+                                                        v                                           v
+                                             PostgreSQL customer index                 PostgreSQL pipeline analytics
 ```
 
 PostgreSQL content-job read tools remain a separate direct read path from the MCP gateway to PostgreSQL.
@@ -48,7 +49,7 @@ This provides:
 4. independent failure handling;
 5. an aggregate MCP gateway that only exposes approved workflows.
 
-The aggregate `MCP — Server` is treated as a gateway surface, not as a place for provider-specific business logic.
+The aggregate `MCP — Server` is a gateway surface, not a place for provider-specific business logic.
 
 After every MCP Server edit, the complete expected tool set must be verified so adding one tool cannot silently remove another accepted tool.
 
@@ -103,13 +104,13 @@ Both remain read-only and use normalized application-level errors.
 
 ## KeyCRM architecture
 
-### Why a local index exists
+KeyCRM remains the CRM source of truth. The model-facing boundary exposes read tools only.
 
-KeyCRM remains the CRM source of truth, but its `/buyer` endpoint does not provide a universal name-search filter. The allowed list filters observed in production are limited to buyer ID, phone, email, and updated/created ranges.
+### Customer search path
 
-Scanning all customer pages for every natural-language name search would be slow, rate-limit-heavy, and unstable while the dataset changes.
+KeyCRM `/buyer` does not provide a universal name-search filter. Production list filters are limited to buyer ID, phone, email, and time ranges, so scanning all buyer pages per natural-language request would be slow and rate-limit-heavy.
 
-Therefore M3 separates **search** from **fresh detail retrieval**:
+Therefore search and fresh detail retrieval are separated:
 
 ```text
 search_customers(query, limit)
@@ -125,34 +126,29 @@ get_customer_details(buyer_id)
 fresh GET /buyer/{buyer_id} from KeyCRM
 ```
 
-### Local index contents
-
-Table:
+Customer index table:
 
 ```text
 public.keycrm_customers
 ```
 
-Only search-oriented fields are stored:
+Stored fields are intentionally minimal:
 
 - `buyer_id`
 - `full_name`
 - `phones[]`
 - `emails[]`
 - `keycrm_updated_at`
+- `manager_id`
 - `synced_at`
 
-Full CRM data such as orders, notes, photos, and conversations is not copied into the local search index.
+Full CRM data such as notes, photos, conversations, and order history is not copied into the customer search index.
 
-### Bootstrap
+### Customer bootstrap
 
-The one-time bootstrap avoids normal page-number scanning. It first resolves the current maximum buyer ID, generates stable groups of 50 IDs, fetches those specific IDs through KeyCRM, UPSERTs each group immediately, waits four seconds, and continues.
+The customer bootstrap avoids unstable page-number scanning. It resolves the current maximum buyer ID, generates stable groups of 50 IDs, fetches those IDs from KeyCRM, UPSERTs each group, waits four seconds, and continues.
 
-This makes progress durable and avoids record shifts caused by concurrent CRM inserts while the initial load is running.
-
-### Incremental synchronization
-
-Permanent workflow:
+### Customer incremental synchronization
 
 ```text
 Schedule every 15 minutes
@@ -163,7 +159,7 @@ Schedule every 15 minutes
  -> wait 4000 ms between provider pages
  -> deduplicate by buyer_id
  -> UPSERT local index
- -> advance checkpoint only after successful data write
+ -> advance checkpoint only after successful write
 ```
 
 Checkpoint table:
@@ -172,13 +168,121 @@ Checkpoint table:
 public.keycrm_sync_state
 ```
 
-The overlap deliberately makes synchronization at-least-once around the boundary; UPSERT by `buyer_id` makes repeated rows safe.
+The overlap provides at-least-once synchronization around the boundary; UPSERT by `buyer_id` makes repeats safe.
 
-### Read-only search boundary
+## KeyCRM manager analytics
 
-`search_customers` uses the n8n credential `mcp_read`, backed by PostgreSQL role `mcp_readonly`.
+Manager sales/lead analytics are based on KeyCRM pipeline cards, not `/order`.
 
-For the CRM index this role is verified as:
+### Why a second local index exists
+
+Questions such as:
+
+```text
+Какая конверсия у Илоны за август?
+Сколько заявок получила Илона и из каких каналов?
+```
+
+need aggregation across thousands of cards. Re-reading and paginating the complete KeyCRM dataset for every question would be slow and would consume provider rate limits.
+
+Therefore pipeline cards are synchronized into a separate local analytics index:
+
+```text
+KeyCRM /pipelines/cards
+        |
+        | bootstrap + 15-minute incremental sync
+        v
+public.keycrm_pipeline_cards
+        |
+        +--> get_manager_sales_stats
+        +--> get_manager_lead_stats
+        +--> get_manager_assignment_history
+```
+
+Reference data is synchronized into:
+
+```text
+public.keycrm_pipelines
+public.keycrm_sources
+public.keycrm_users
+```
+
+The pipeline-card index stores only fields needed for manager/source/status/time/value analytics, including:
+
+```text
+card_id
+pipeline_id
+source_id
+manager_id
+status_id/status_alias/status_title
+created_at/updated_at/status_changed_at
+payments_total/products_total
+UTM fields
+```
+
+### Pipeline-card bootstrap integrity rule
+
+The first global page-based bootstrap exposed a real consistency risk: new cards inserted while a long page scan is running can shift page boundaries. The workflow completed successfully, but provider/local count reconciliation found 22 historical records missing from the initial local snapshot.
+
+The discrepancy was detected by comparing KeyCRM `created_between` counts against local counts, narrowed generically by month/week/day, then fetching and UPSERTing the exact missing provider records.
+
+After reconciliation:
+
+```text
+provider total == local total == unique local card_id
+```
+
+This reconciliation result is part of production acceptance and must be repeated after any future full pipeline-card rebuild unless the bootstrap strategy is replaced with a stable partitioned scan.
+
+### Pipeline-card incremental synchronization
+
+Permanent path:
+
+```text
+Schedule every 15 minutes
+ -> load pipeline_cards_incremental checkpoint
+ -> subtract 2-minute overlap
+ -> GET /pipelines/cards with filter[updated_between]
+ -> paginate at limit=50 with 4000 ms request interval
+ -> compare previous local manager_id/source_id
+ -> record observed assignment/source changes
+ -> UPSERT changed cards
+ -> advance checkpoint after successful write
+```
+
+### Assignment history limitation
+
+KeyCRM OpenAPI does not expose the historical assignment action log. Therefore old manager/source reassignment history cannot be reconstructed reliably.
+
+The system stores observed snapshot differences from a documented boundary:
+
+```text
+public.keycrm_pipeline_assignment_events
+public.keycrm_pipeline_tracking_meta
+```
+
+`get_manager_assignment_history` returns the tracking boundary, observation cadence, and explicit coverage note. Multiple intermediate changes occurring entirely between two 15-minute polls may be collapsed into the final observed change.
+
+### Call analytics
+
+Call statistics and call timeline remain fresh KeyCRM reads rather than local-index analytics:
+
+```text
+manager name
+ -> GET /users -> resolve manager_id
+ -> GET /calls with manager_id + created_between
+ -> get_manager_call_stats
+    or
+ -> get_manager_call_timeline -> calculate call-to-call gaps
+```
+
+The call-timeline tool calculates each positive break from the previous call end to the next call start.
+
+## Read-only database boundary
+
+Model-facing PostgreSQL reads use n8n credential `mcp_read`, backed by role `mcp_readonly`.
+
+Verified business-read permissions are:
 
 ```text
 SELECT = true
@@ -187,13 +291,13 @@ UPDATE = false
 DELETE = false
 ```
 
-The internal synchronization workflow uses the application PostgreSQL credential because synchronization is infrastructure maintenance, not a model-facing business mutation.
+Internal synchronization uses the application PostgreSQL credential because synchronization is infrastructure maintenance, not a model-facing business mutation.
 
-### KeyCRM write boundary
+## KeyCRM write boundary
 
-The KeyCRM Bearer credential itself is not treated as a database-style read-only role. The M3 boundary is enforced structurally: exposed CRM workflows perform only GET requests.
+The KeyCRM Bearer credential itself is not treated as a database-style read-only role. The boundary is enforced structurally: exposed CRM workflows perform GET/read operations only.
 
-No KeyCRM POST/PATCH/PUT/DELETE operation is exposed through M3 MCP tools.
+No KeyCRM POST/PATCH/PUT/DELETE operation is exposed through the current MCP surface.
 
 ## Response normalization
 
@@ -206,14 +310,13 @@ Provider-specific failures are converted into stable application-level codes suc
 - `INVALID_INPUT`
 - `NOT_FOUND`
 - `AMBIGUOUS_ATTACHMENT`
+- `AMBIGUOUS_MANAGER`
 - `UNSUPPORTED_FILE_TYPE`
 - `UPSTREAM_ERROR`
 
 ## Read/write boundary
 
-### Read tools
-
-Current read tools include:
+Current business read tools include:
 
 - `search_emails`
 - `get_email_attachment`
@@ -226,19 +329,21 @@ Current read tools include:
 - `get_job_details`
 - `search_customers`
 - `get_customer_details`
+- `get_manager_customer_stats`
+- `get_manager_call_stats`
+- `get_manager_sales_stats`
+- `get_manager_lead_stats`
+- `get_manager_assignment_history`
+- `get_manager_call_timeline`
 
-These do not mutate business state.
-
-### Write tools
-
-Future examples:
+Future write examples remain a separate class:
 
 - `send_email`
 - `create_calendar_event`
 - `update_customer`
 - `upload_drive_file`
 
-Write tools must be a separate tool class with an explicit approval boundary and idempotency protection where applicable.
+Write tools require an explicit approval boundary and idempotency protection where applicable.
 
 ## Audit pipeline
 
@@ -258,7 +363,7 @@ MCP request
 
 Audit storage is implemented by `MCP — Audit Tool Call` and `database/migrations/001_mcp_tool_audit.sql`.
 
-Finish-audit calls omit `arguments_json`. Sensitive search arguments such as Gmail queries and CRM customer queries are stored redacted.
+Finish-audit calls omit `arguments_json`. Sensitive search arguments such as Gmail queries and CRM customer/manager queries are redacted.
 
 ## Runtime compatibility rule
 
@@ -268,4 +373,8 @@ This rule was applied when n8n `2.33.3` misrouted HTTP 404 items through the HTT
 
 ## M3 evidence
 
-Detailed production evidence is recorded in `docs/M3_KEYCRM_ACCEPTANCE.md`.
+Detailed production evidence is recorded in:
+
+- `docs/M3_KEYCRM_ACCEPTANCE.md`
+- `docs/M3_MANAGER_STATS_ACCEPTANCE.md`
+- `docs/M3_MANAGER_ANALYTICS_ACCEPTANCE.md`
