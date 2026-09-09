@@ -40,39 +40,55 @@ Detailed M2 evidence is recorded in the Calendar, Drive, and acceptance document
 
 ## M3 — CRM integration
 
-Status: in progress; production read tools deployed.
+Status: in progress; CRM search/details, manager counts/calls, and manager analytics are deployed.
 
 - [x] Select KeyCRM and define the read-only boundary
 - [x] Create local PostgreSQL customer search index
-- [x] Complete one-time KeyCRM bootstrap
-- [x] Add scheduled incremental synchronization with `updated_between`
+- [x] Complete one-time KeyCRM customer bootstrap
+- [x] Add scheduled customer incremental synchronization with `updated_between`
 - [x] Keep KeyCRM as source of truth and store only minimal search fields locally
 - [x] `search_customers(query, limit)`
 - [x] `get_customer_details(buyer_id)`
-- [x] Add `manager_id` to the local search index
+- [x] Add `manager_id` to the local customer index
 - [x] Synchronize `manager_id` in full and incremental paths
 - [x] `get_manager_customer_stats(manager)`
 - [x] Resolve manager names through KeyCRM `GET /users`
-- [x] Support Cyrillic/Latin manager-name matching without hard-coded manager aliases
+- [x] Support Cyrillic/Latin manager-name matching without hard-coded aliases
 - [x] Keep manager statistics on the read-only PostgreSQL credential
-- [x] Expose all CRM read tools through the aggregate `MCP — Server`
-- [x] Verify the full M0-M3 tool surface after each gateway edit
-- [x] Natural-language client search for a customer
-- [ ] Natural-language client acceptance for `get_manager_customer_stats`
+- [x] Natural-language client acceptance for `get_manager_customer_stats`
+- [x] `get_manager_call_stats(manager, start, end)`
+- [x] Create local pipeline-card analytics index
+- [x] Reconcile bootstrap count against live KeyCRM and repair the 22 missing historical cards
+- [x] Add permanent 15-minute pipeline-card incremental synchronization
+- [x] Add observed manager/source reassignment tracking from a documented start boundary
+- [x] `get_manager_sales_stats(manager, start, end)`
+- [x] `get_manager_lead_stats(manager, start, end)`
+- [x] `get_manager_assignment_history(manager, start, end)`
+- [x] `get_manager_call_timeline(manager, start, end)`
+- [x] Expose all current CRM read tools through the aggregate `MCP — Server`
+- [x] Verify the full M0-M3 tool surface after the latest gateway edit
+- [x] Low-level production acceptance for all four manager analytics tools
+- [ ] Natural-language MCP-client acceptance for the four newest manager analytics tools
 - [ ] Final cross-system customer context demo and M3 closure
 
-Current production gateway includes:
+Current production CRM gateway includes:
 
 ```text
 search_customers
 get_customer_details
 get_manager_customer_stats
+get_manager_call_stats
+get_manager_sales_stats
+get_manager_lead_stats
+get_manager_assignment_history
+get_manager_call_timeline
 ```
 
 Detailed evidence:
 
 - `docs/M3_KEYCRM_ACCEPTANCE.md`
 - `docs/M3_MANAGER_STATS_ACCEPTANCE.md`
+- `docs/M3_MANAGER_ANALYTICS_ACCEPTANCE.md`
 
 ## M4 — Controlled writes
 
