@@ -49,20 +49,30 @@ get_manager_call_timeline
 
 The complete tool surface was re-verified after the latest gateway edit; no previously accepted tool was removed.
 
+No gateway/workflow change was made during the 2026-09-09 KeyCRM communications investigation because the current official public API does not expose a supported communications read operation.
+
 ## Milestones
 
 ```text
 M0 Foundation                 complete
 M1 Production cleanup         complete
 M2 Google Workspace expansion complete
-M3 CRM integration            in progress
+M3 CRM integration            in progress / provider communications API blocker
 M4 Controlled writes          not started
 M5 Portfolio hardening        not started
 ```
 
 M3 CRM search/details, customer/manager counts, call statistics, sales/lead analytics, observed reassignment history, and call timeline are already deployed. The newest four manager analytics tools passed natural-language MCP-client acceptance on 2026-09-09.
 
-M3 is NOT closed yet because the final customer-context architecture must use KeyCRM-native customer communications where supported rather than treating Gmail as the primary communication history.
+The remaining M3 communications requirement was investigated against the current official keyCRM OpenAPI on 2026-09-09. The result is that CRM chat/message history is visible in the keyCRM UI but is not exposed by the current public OpenAPI v1.2.0, and the documented outgoing webhook events also do not include chat/message events. Therefore `get_customer_communications` has not been implemented against a guessed or private interface.
+
+Detailed communications evidence:
+
+```text
+docs/M3_KEYCRM_COMMUNICATIONS_API.md
+```
+
+M3 is still not closed. Generic requests for customer communication history must not silently use Gmail as a substitute for unavailable CRM-native history. M4 remains blocked until M3 is explicitly closed.
 
 Detailed continuation instructions are in:
 
@@ -269,7 +279,7 @@ n8n/gmail/SEARCH_EMAILS.json
 
 `search_emails` reads the connected Gmail mailbox directly. It remains a valid independent Gmail tool.
 
-## Customer communications architecture — important
+## Customer communications architecture — official API result
 
 The previous intended final M3 demo was:
 
@@ -281,18 +291,32 @@ search_customers
 -> combine CRM + Gmail
 ```
 
-That is not the correct default for a request such as `show the communication/history with this customer` because KeyCRM itself contains customer communication history, including email and other connected channels in the CRM UI.
+That is not the correct default for a request such as `show the communication/history with this customer` because KeyCRM itself contains customer communication history in its UI, including email and other connected channels.
 
-Correct architectural direction:
+The official interface investigation on 2026-09-09 established the following current boundary:
+
+- the public OpenAPI v1.2.0 exposes no `/communications`, `/chats`, `/messages`, `/conversations`, or equivalent read resource;
+- `GET /buyer/{buyerId}` documents only `manager`, `shipping`, `company`, `loyalty`, and `custom_fields` as allowed includes;
+- the official outgoing webhook documentation exposes order/payment/lead-status events, not chat/message events;
+- therefore the current supported public interface cannot provide CRM-native historical communication content for an MCP read tool.
+
+Production behavior must therefore remain:
 
 ```text
-customer communication/history request
--> resolve customer in KeyCRM
--> read KeyCRM-native communications first, if supported by an official/stable API
--> use Gmail only for explicit Gmail/mailbox questions or as an additional source when requested
+explicit Gmail/mailbox request
+-> search_emails
+-> Gmail
 ```
 
-Do not assume that because the KeyCRM UI shows messages, the public API necessarily exposes them. The next step must verify supported API access first.
+For a generic CRM communication-history request, do not silently substitute Gmail. Until keyCRM publishes a supported communications interface, report the provider limitation rather than fabricating or scraping the missing data.
+
+Do not use private/internal keyCRM UI endpoints as production architecture without a separate explicit architecture/security decision.
+
+Evidence:
+
+```text
+docs/M3_KEYCRM_COMMUNICATIONS_API.md
+```
 
 ## Security state
 
@@ -302,6 +326,7 @@ Do not assume that because the KeyCRM UI shows messages, the public API necessar
 - Internal synchronization writes only to local PostgreSQL infrastructure tables.
 - Business-read tools use `mcp_readonly`.
 - No write-capable business tool is exposed through MCP.
+- No unsupported KeyCRM communications endpoint was introduced during this investigation.
 
 ## Repository evidence
 
@@ -314,6 +339,7 @@ docs/MCP_TOOLS.md
 docs/M3_KEYCRM_ACCEPTANCE.md
 docs/M3_MANAGER_STATS_ACCEPTANCE.md
 docs/M3_MANAGER_ANALYTICS_ACCEPTANCE.md
+docs/M3_KEYCRM_COMMUNICATIONS_API.md
 docs/NEXT_CHAT_HANDOFF_2026-09-09.md
 database/migrations/003_keycrm_customer_index.sql
 database/migrations/004_keycrm_manager_id.sql
@@ -323,8 +349,10 @@ n8n/gmail/SEARCH_EMAILS.json
 
 ## Exact next step
 
-Before closing M3, research the current official KeyCRM API and verify with safe GET-only probes whether customer communications stored in KeyCRM are accessible through a supported stable interface, including emails/chats/messages and their relation to buyer/lead IDs.
+Do not start M4.
 
-If supported, implement a universal read-only customer-communications tool and then rerun the final natural-language customer-context demo with KeyCRM communications as the primary source.
+The official/public communications API investigation is complete and currently blocked by provider capability. The next project decision is to keep M3 open until keyCRM publishes a supported read interface or until an explicit M3 closure decision accepts this provider limitation.
 
-If not supported, document the limitation explicitly before considering any other architecture.
+If keyCRM later publishes a supported customer communications read API, implement `get_customer_communications` through the existing read-only/audited MCP pattern, verify the complete gateway surface, run low-level and natural-language acceptance, export the exact production workflow, and synchronize GitHub.
+
+Until then, use Gmail only for explicit Gmail/mailbox questions and do not represent Gmail as KeyCRM-native communication history.
