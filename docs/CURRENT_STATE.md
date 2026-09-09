@@ -21,8 +21,8 @@ Authentication: n8n OAuth2 user authentication for the MCP endpoint.
 Current published production version:
 
 ```text
-version_id:        07843872-4ab5-46f1-8df9-9a6bc8418673
-active_version_id: 07843872-4ab5-46f1-8df9-9a6bc8418673
+version_id:        fcfb4961-f40e-44b6-b2de-627c31f87bea
+active_version_id: fcfb4961-f40e-44b6-b2de-627c31f87bea
 ```
 
 Current published tool surface:
@@ -36,10 +36,12 @@ Current published tool surface:
 - `read_drive_file`
 - `get_calendar_events`
 - `find_free_time`
+- `search_customers`
+- `get_customer_details`
 
 Legacy tools `hello_world` and `get_person` remain removed.
 
-The current repository export `n8n/MCP_SERVER.json` contains the same recovered production surface, including both Calendar tools.
+The complete tool surface was re-verified after adding the two KeyCRM tools so the previous Calendar gateway regression pattern is not repeated.
 
 ## Milestone status
 
@@ -49,19 +51,20 @@ M1 — Production cleanup: complete.
 
 M2 — Google Workspace expansion: complete.
 
-Completed M2 tools:
+M3 — CRM integration: in progress.
 
-- `get_email_attachment`
-- `search_drive_files`
-- `read_drive_file`
-- `get_calendar_events`
-- `find_free_time`
+M3 low-level production acceptance is complete for:
 
-No write-capable business behavior is exposed in M2.
+- KeyCRM customer bootstrap
+- scheduled incremental customer synchronization
+- `search_customers`
+- `get_customer_details`
+- aggregate MCP Server integration
+- read-only database permission verification
 
-A Calendar gateway regression discovered on 2026-09-08 temporarily removed `get_calendar_events` after `find_free_time` was added to the aggregate MCP Server. The missing tool was restored, the server was republished, the GitHub export was synchronized, and post-recovery natural-language regression acceptance passed for both Calendar tools on 2026-09-09. The regression is closed in `docs/MCP_SERVER_REGRESSION_2026-09-08.md`.
+The only remaining M3 acceptance item is the natural-language cross-system customer context demo through the real MCP client.
 
-Next milestone: M3 — CRM integration.
+Detailed M3 evidence: `docs/M3_KEYCRM_ACCEPTANCE.md`.
 
 ## Normalized MCP contract
 
@@ -106,24 +109,24 @@ Current normalized error codes include:
 
 Audit workflow: `MCP — Audit Tool Call`
 
-Audit table: `mcp_tool_calls`
+Audit table: `public.mcp_tool_calls`.
 
 Lifecycle for valid audited calls:
 
 ```text
 Validate input
  -> Audit start
- -> Provider/database operation
- -> Normalize success/error
+ -> provider/database operation
+ -> normalize success/error
  -> Audit finish
- -> Return original MCP response
+ -> return original MCP response
 ```
 
 `INVALID_INPUT` remains before `Audit start` and therefore does not create an audit row.
 
 All finish-audit subworkflow calls omit `arguments_json`; only audit start writes call arguments.
 
-Sensitive-argument sanitization remains centralized. Gmail search queries are stored as `[REDACTED]`; credential/session-style keys are recursively redacted.
+Sensitive-argument sanitization remains centralized. Gmail search queries and KeyCRM customer search queries are stored as `[REDACTED]`.
 
 ## Gmail
 
@@ -167,34 +170,15 @@ Workflow: `MCP — Drive Search`
 
 Status: active and exposed.
 
-Inputs:
-
-- `query` — required natural search term
-- `limit` — optional integer, default `10`, range `1..50`
-
-No matches are a successful empty result.
-
 ### `read_drive_file`
 
 Workflow: `MCP — Drive Read File`
 
 Status: active and exposed.
 
-Input:
+Supported content types include Google Docs, Sheets, Slides, PDF, and text-based regular files. Text is capped at `50000` characters with explicit truncation metadata. Unsupported binaries return `UNSUPPORTED_FILE_TYPE`; missing files return `NOT_FOUND`.
 
-- `file_id` — required non-empty Google Drive file ID
-
-Supported content types:
-
-- Google Docs -> `text/plain`
-- Google Sheets -> `text/csv`
-- Google Slides -> `text/plain`
-- PDF -> extracted text
-- text-based regular files -> text
-
-Text is capped at `50000` characters with explicit truncation metadata. Unsupported binaries return `UNSUPPORTED_FILE_TYPE`. Missing files return `NOT_FOUND`.
-
-Natural cross-tool acceptance for search -> read -> client summary is complete.
+Natural cross-tool search -> read -> client summary acceptance is complete.
 
 ## Google Calendar
 
@@ -208,90 +192,124 @@ https://www.googleapis.com/auth/calendar.readonly
 
 ### `get_calendar_events`
 
-Workflow: `MCP — Calendar Events`
-
 Workflow ID: `IUpcFPRH3xOVbgEq`
 
 Status: active, published, exposed, and accepted end to end.
 
-Inputs:
-
-- `start` — required RFC3339 timestamp with timezone
-- `end` — required RFC3339 timestamp with timezone and later than `start`
-- `calendar_id` — optional string, defaults to `primary`
-- `limit` — optional integer, defaults to `50`, range `1..2500`
-
-Provider behavior uses `singleEvents=true` and `orderBy=startTime`. Timed and all-day events preserve their respective Calendar fields.
-
-Accepted cases include:
-
-- invalid input -> `INVALID_INPUT`
-- valid primary window -> normalized success
-- nonexistent calendar -> provider 404 -> `NOT_FOUND`
-- succeeded/failed audit finalization
-- natural week/month/year queries
-- final post-recovery gateway regression request on 2026-09-09
-
-Final post-recovery request:
-
-```text
-Что у меня завтра в календаре?
-```
-
-Resolved tool arguments:
-
-```text
-start:       2026-09-10T00:00:00+02:00
-end:         2026-09-11T00:00:00+02:00
-calendar_id: primary
-limit:       50
-```
-
-The real primary calendar was empty; Claude reported no events. Audit row: `succeeded`, `duration_ms=606`.
-
-Detailed acceptance: `docs/CALENDAR_ACCEPTANCE.md` and `docs/ACCEPTANCE_TESTS.md`.
-
 ### `find_free_time`
-
-Workflow: `MCP — Find Free Time`
 
 Workflow ID: `dDiqHH9C5clOrYOX`
 
 Status: active, published, exposed, and accepted end to end.
 
+Final post-recovery natural-language regression acceptance passed on 2026-09-09 for both Calendar tools. Detailed evidence is in `docs/CALENDAR_ACCEPTANCE.md`, `docs/FIND_FREE_TIME_ACCEPTANCE.md`, `docs/ACCEPTANCE_TESTS.md`, and `docs/MCP_SERVER_REGRESSION_2026-09-08.md`.
+
+## KeyCRM
+
+Provider API base URL:
+
+```text
+https://openapi.keycrm.app/v1
+```
+
+Credential: `KeyCRM MCP` using Bearer authentication.
+
+KeyCRM remains the source of truth. MCP does not write to KeyCRM.
+
+### Local customer search index
+
+Table:
+
+```text
+public.keycrm_customers
+```
+
+Stored fields:
+
+- `buyer_id`
+- `full_name`
+- `phones[]`
+- `emails[]`
+- `keycrm_updated_at`
+- `synced_at`
+
+The local index intentionally excludes full CRM data such as orders, notes, photos, and conversations.
+
+Initial bootstrap workflow:
+
+```text
+ADMIN — KeyCRM Customer Index Sync
+workflow_id: KP1EPFbemTrxbkcY
+```
+
+The accepted bootstrap loaded `24118` unique customers with zero duplicate `buyer_id` values.
+
+Permanent incremental workflow:
+
+```text
+ADMIN — KeyCRM Customer Index Incremental Sync
+workflow_id: KCIuipW0TTnCMxkY
+version_id: 9d8018ad-dc25-4747-8ca5-26eeb320a9b3
+status: active
+schedule: every 15 minutes
+```
+
+Incremental sync uses KeyCRM `filter[updated_between]`, pagination with `limit=50`, a `4000 ms` request interval, a two-minute overlap on the previous checkpoint, UPSERT by `buyer_id`, and `public.keycrm_sync_state` for the successful checkpoint.
+
+A real automatic schedule-trigger execution passed on 2026-09-09.
+
+### `search_customers`
+
+Workflow:
+
+```text
+MCP — KeyCRM Customer Search
+workflow_id: yej0SNKc4Ovb4rzq
+version_id: 312b70c0-9f47-4b17-ac9e-5b61e88ebd2f
+status: active
+```
+
 Inputs:
 
-- `start` — required RFC3339 timestamp with timezone
-- `end` — required RFC3339 timestamp with timezone and later than `start`
-- `duration_minutes` — optional positive integer, defaults to `30`, must fit inside the requested window
-- `calendar_id` — optional string, defaults to `primary`
+- `query` — required non-empty string
+- `limit` — optional integer, default `10`, range `1..50`
 
-Provider endpoint:
+Search supports customer name, partial name, email, phone, and buyer ID.
 
-```text
-POST https://www.googleapis.com/calendar/v3/freeBusy
-```
-
-The workflow validates input, starts audit, calls FreeBusy, rejects per-calendar provider errors, clips/merges busy intervals, computes maximal qualifying free windows, finalizes audit, and returns the normalized business result.
-
-Final post-recovery request on 2026-09-09:
+Search reads use the `mcp_read` n8n credential. The underlying PostgreSQL role `mcp_readonly` has:
 
 ```text
-Найди мне завтра свободное окно на 60 минут с 9:00 до 18:00.
+SELECT = true
+INSERT = false
+UPDATE = false
+DELETE = false
 ```
 
-Resolved tool arguments:
+An initial acceptance failure exposed missing `SELECT` permission on the newly created table; only `SELECT` was granted and the workflow then passed.
+
+### `get_customer_details`
+
+Workflow:
 
 ```text
-start:            2026-09-10T09:00:00+02:00
-end:              2026-09-10T18:00:00+02:00
-calendar_id:      primary
-duration_minutes: 60
+MCP — KeyCRM Customer Details
+workflow_id: KcrmDetA9V7cQ2Lx
+version_id: 9cca4b55-80d3-4be4-b427-2a533eeaefbf
+status: active
 ```
 
-The real primary calendar was empty, so Claude reported the full 09:00–18:00 interval as available. Audit row: `succeeded`, `duration_ms=450`.
+Input:
 
-Detailed acceptance: `docs/FIND_FREE_TIME_ACCEPTANCE.md` and `docs/ACCEPTANCE_TESTS.md`.
+- `buyer_id` — positive integer
+
+The workflow performs a fresh `GET /buyer/{buyer_id}` request to KeyCRM.
+
+Accepted cases:
+
+- existing buyer -> normalized success
+- nonexistent buyer -> `NOT_FOUND`
+- invalid buyer ID -> `INVALID_INPUT`
+- succeeded/failed audit finalization
 
 ## GitHub
 
@@ -301,59 +319,37 @@ Status: active and exposed.
 
 Missing files normalize to `NOT_FOUND`; other provider failures use `UPSTREAM_ERROR`.
 
-## PostgreSQL
+## PostgreSQL content-job tools
 
 Workflow: `MCP — PostgreSQL Recent Jobs`
 
 Status: active and exposed.
 
-Input: optional `limit`, default `10`, range `1..50`.
-
 Workflow: `MCP — PostgreSQL Job Details`
 
 Status: active and exposed.
 
-Input: UUID `job_id`.
-
-Zero-row results normalize to `NOT_FOUND`. Database failures normalize to `UPSTREAM_ERROR`.
-
-## Repository export state
-
-Current workflow exports include:
-
-- `n8n/MCP_SERVER.json`
-- `n8n/AUDIT_TOOL_CALL.json`
-- `n8n/github/GET_GITHUB_FILE.json`
-- `n8n/gmail/SEARCH_EMAILS.json`
-- `n8n/gmail/GET_EMAIL_ATTACHMENT.json`
-- `n8n/postgres/GET_RECENT_JOBS.json`
-- `n8n/postgres/GET_JOB_DETAILS.json`
-- `n8n/drive/SEARCH_DRIVE_FILES.json`
-- `n8n/drive/READ_DRIVE_FILE.json`
-- `n8n/calendar/GET_CALENDAR_EVENTS.json`
-- `n8n/calendar/FIND_FREE_TIME.json`
-
-Audit migrations:
-
-- `database/migrations/001_mcp_tool_audit.sql`
-- `database/migrations/002_redact_existing_email_audit_queries.sql`
-
-Credential values are not intentionally stored in repository exports.
+Business-read tools use the read-only PostgreSQL credential.
 
 ## Security state
 
-- Gmail, GitHub, Google Drive, and Google Calendar credentials remain in n8n credential storage.
+- Gmail, GitHub, Drive, Calendar, and KeyCRM credentials remain in n8n credential storage.
 - Drive and Calendar use dedicated read-only OAuth scopes.
-- PostgreSQL business-read tools use the read-only `mcp_read` credential.
-- The centralized audit workflow uses the write-capable application PostgreSQL credential only for audit writes.
+- KeyCRM MCP workflows expose read-only CRM behavior; internal synchronization writes only to the local PostgreSQL search index.
+- PostgreSQL business-read and CRM-search tools use the read-only credential/role.
+- The centralized audit workflow and internal synchronization workflows use the write-capable application PostgreSQL credential only for internal infrastructure tables.
 - No write-capable business tool is exposed through MCP.
-- Sensitive audit arguments are sanitized centrally.
+- Sensitive audit arguments are sanitized or explicitly redacted.
 
-## Exact next milestone
+## Repository state
 
-M3 — CRM integration:
+Key M3 documentation/migration files:
 
-1. define the CRM provider and read-only auth boundary;
-2. implement `search_customers(query, limit)`;
-3. implement `get_customer_details(customer_id)`;
-4. run a cross-system customer context demo without introducing write capability.
+- `docs/M3_KEYCRM_ACCEPTANCE.md`
+- `database/migrations/003_keycrm_customer_index.sql`
+
+M0-M2 workflow exports and acceptance documents remain in the repository.
+
+## Exact next step
+
+Complete the M3 natural-language cross-system customer-context demo through the real MCP client. Only after that passes should M3 be marked complete and work move to M4 controlled writes.
