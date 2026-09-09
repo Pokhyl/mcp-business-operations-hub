@@ -40,7 +40,7 @@ Detailed M2 evidence is recorded in the Calendar, Drive, and acceptance document
 
 ## M3 — CRM integration
 
-Status: in progress; CRM search/details, manager counts/calls, and manager analytics are deployed.
+Status: in progress; CRM read and manager analytics capabilities are deployed and client-accepted. Only the final cross-system context demo remains before closure.
 
 - [x] Select KeyCRM and define the read-only boundary
 - [x] Create local PostgreSQL customer search index
@@ -68,7 +68,7 @@ Status: in progress; CRM search/details, manager counts/calls, and manager analy
 - [x] Expose all current CRM read tools through the aggregate `MCP — Server`
 - [x] Verify the full M0-M3 tool surface after the latest gateway edit
 - [x] Low-level production acceptance for all four manager analytics tools
-- [ ] Natural-language MCP-client acceptance for the four newest manager analytics tools
+- [x] Natural-language MCP-client acceptance for the four newest manager analytics tools
 - [ ] Final cross-system customer context demo and M3 closure
 
 Current production CRM gateway includes:
