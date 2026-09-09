@@ -2,22 +2,46 @@
 
 ## Project
 
-Repository: `Pokhyl/mcp-business-operations-hub`
+```text
+Pokhyl/mcp-business-operations-hub
+```
 
-Production n8n: `https://publisher.hodor.com.pl`
-Runtime: n8n `2.37.10`
+This is an existing production project. Do not restart it or perform a new general architecture audit.
 
-Aggregate MCP gateway:
+GitHub is the source of truth. If chat history or a VPS checkout disagrees with the connected GitHub repository, trust GitHub.
+
+## Read first
+
+Before continuing, read:
 
 ```text
-name: MCP — Server
+docs/CURRENT_STATE.md
+docs/ROADMAP.md
+docs/ARCHITECTURE.md
+docs/MCP_TOOLS.md
+docs/M3_KEYCRM_ACCEPTANCE.md
+docs/M3_MANAGER_STATS_ACCEPTANCE.md
+docs/M3_MANAGER_ANALYTICS_ACCEPTANCE.md
+docs/M3_KEYCRM_COMMUNICATIONS_API.md
+```
+
+## Production
+
+```text
+n8n: https://publisher.hodor.com.pl
+runtime: 2.37.10
+```
+
+MCP Server:
+
+```text
 workflow_id: dSohghXnQp078EZm
-active_version_id: 3b70da4f-89b0-4bef-bcc1-dab23aa2d94a
+active_version: 3b70da4f-89b0-4bef-bcc1-dab23aa2d94a
 authentication: n8n OAuth2
 status: active
 ```
 
-Current published tools:
+Current published MCP tool surface remains 17 tools:
 
 ```text
 get_github_file
@@ -39,36 +63,34 @@ get_manager_assignment_history
 get_manager_call_timeline
 ```
 
-## Working rules
+No MCP workflow/tool was added during the communications investigation.
 
-- Continue the existing production project. Do not redesign from scratch.
-- GitHub documentation is the source of truth. Read `docs/CURRENT_STATE.md`, `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`, `docs/MCP_TOOLS.md`, and this handoff before meaningful changes.
-- Do not weaken security or quality gates.
-- Keep exposed business tools read-only unless/ until M4 controlled writes is explicitly started.
-- KeyCRM remains source of truth.
-- Internal sync workflows may write only to local PostgreSQL infrastructure tables.
-- User-facing PostgreSQL reads use credential `mcp_read`, backed by role `mcp_readonly`.
-- `mcp_readonly` must remain SELECT-only on business-read tables.
-- Every valid audited tool follows: validate -> audit start -> provider/database read -> normalize -> audit finish -> return.
-- `INVALID_INPUT` remains pre-audit.
-- On `Audit success` / `Audit failed`, remove `arguments_json` from finish mappings entirely; do not send blank `{}`.
-- Sensitive search inputs must be redacted in audit start.
-- When changing `MCP — Server`, verify the complete tool surface so no accepted tool disappears.
-- Do not fabricate unsupported historical data.
+## Completed milestones
 
-## M0–M2
+```text
+M0 Foundation                 complete
+M1 Production cleanup         complete
+M2 Google Workspace expansion complete
+```
 
-M0 Foundation: complete.
-M1 Production cleanup: complete.
-M2 Google Workspace expansion: complete.
+M3 CRM integration remains in progress.
 
-Calendar regression was fully closed and both `get_calendar_events` and `find_free_time` are active.
+Already deployed and accepted:
 
-## M3 — KeyCRM current state
+```text
+search_customers
+get_customer_details
+get_manager_customer_stats
+get_manager_call_stats
+get_manager_sales_stats
+get_manager_lead_stats
+get_manager_assignment_history
+get_manager_call_timeline
+```
 
-M3 read-only CRM integration is nearly complete.
+Natural-language client tests for the four newest manager analytics tools passed on 2026-09-09.
 
-### Customer index
+## KeyCRM customer index
 
 Table:
 
@@ -76,7 +98,7 @@ Table:
 public.keycrm_customers
 ```
 
-Minimal fields:
+Fields:
 
 ```text
 buyer_id
@@ -96,9 +118,9 @@ workflow_id: KCIuipW0TTnCMxkY
 schedule: every 15 minutes
 ```
 
-KeyCRM `/buyer` name search limitation is why the local index exists. `search_customers` searches this index; `get_customer_details` retrieves a fresh record directly from KeyCRM.
+`search_customers` uses this minimal local index. `get_customer_details` performs a fresh `GET /buyer/{buyer_id}` from KeyCRM.
 
-### Manager analytics index
+## KeyCRM manager analytics
 
 Main table:
 
@@ -121,7 +143,7 @@ public.keycrm_pipeline_assignment_events
 public.keycrm_pipeline_tracking_meta
 ```
 
-Permanent sync:
+Permanent pipeline-card sync:
 
 ```text
 ADMIN — KeyCRM Pipeline Card Index Incremental Sync
@@ -129,214 +151,142 @@ workflow_id: KcrmPipelineIncrementalA1
 schedule: every 15 minutes
 ```
 
-Initial pipeline-card bootstrap completed and post-bootstrap reconciliation repaired exactly 22 cards missed by shifting page boundaries. Final verified provider/local totals reached equality. Incremental sync continued to keep the index current.
-
-### Manager tools already deployed
+Assignment history remains snapshot-based from:
 
 ```text
-get_manager_customer_stats
-get_manager_call_stats
-get_manager_sales_stats
-get_manager_lead_stats
-get_manager_assignment_history
-get_manager_call_timeline
+tracking_started_at: 2026-09-09T18:37:30.384Z
 ```
 
-All four newest analytics tools passed natural-language MCP client testing on 2026-09-09:
+Do not infer historical initiators or pre-tracking assignment history.
 
-```text
-Какая конверсия у Илоны за август?
-Сколько заявок получила Илона в августе и из каких каналов?
-Какие переназначения были у Илоны после начала отслеживания?
-Какие перерывы между звонками делает Илона сегодня?
-```
+## Gmail fix already complete
 
-Example accepted August stats for Ilona Kamuz after full reconciliation:
-
-```text
-total_leads_raw:                  646
-duplicate_leads:                  165
-total_leads_excluding_duplicates: 481
-successful_sales:                  76
-conversion_percent_raw:           11.76
-conversion_percent_excluding_duplicates: 15.80
-successful_payments_total:      82760
-```
-
-Call timeline acceptance on 2026-09-09:
-
-```text
-total_calls:                    78
-average_positive_gap_minutes:  4.5
-longest_gap_minutes:          41.2
-gaps_over_15_minutes:           6
-gaps_over_30_minutes:           1
-```
-
-## Assignment-history limitation
-
-KeyCRM UI has an Action History showing who changed fields, including manager changes. However, the public KeyCRM OpenAPI currently does not expose that historical action log, and current public webhooks do not provide a reliable change initiator for manager reassignment.
-
-Therefore `get_manager_assignment_history` intentionally uses observed snapshots every 15 minutes and does not claim to know the initiator or reconstruct history before tracking started.
-
-Tracking start currently documented as:
-
-```text
-2026-09-09T18:37:30.384Z
-```
-
-Do not try to invent old assignment history or the actor who made a change.
-
-## Important discovery at end of current chat: customer communications architecture
-
-The attempted final M3 cross-system demo exposed an architecture mistake.
-
-The demo was initially designed as:
-
-```text
-search_customers
--> get_customer_details
--> take customer email
--> search_emails
--> read Gmail
-```
-
-That is valid only when the user explicitly asks about the connected Gmail mailbox. It is NOT the correct primary path for questions such as `покажи переписку с клиентом`.
-
-The user pointed out that KeyCRM itself contains communication history, including emails and other connected customer channels. Therefore customer communication history should be CRM-first, not Gmail-first.
-
-Current `search_emails` reads directly from Gmail via Gmail API. It does not read KeyCRM communication history.
-
-### Gmail zero-result defect fixed
-
-During the failed cross-system demo, `search_emails` returned no workflow response when Gmail matched zero messages. This was a real workflow defect.
-
-Production fix:
-
-```text
-Get many messages (alwaysOutputData=true)
--> Has messages?
-   true  -> Get a message -> normal response
-   false -> Format MCP response with success=true, data=[], count=0
-```
-
-Audit start now stores Gmail query as `[REDACTED]`.
-
-Production workflow:
+Workflow:
 
 ```text
 MCP — Gmail Search
 workflow_id: tUxRIiXHh2UaWflF
-active_version_id: 98f525fe-84ed-486b-a013-163b5ad0f778
-status: active
+active_version: 98f525fe-84ed-486b-a013-163b5ad0f778
 ```
 
-Production n8n was restarted after publishing and health returned OK.
+Zero Gmail results now return a normal successful empty response instead of no MCP response.
 
-The current production export has been synchronized to:
+Gmail search audit query is redacted.
+
+`search_emails` remains an independent Gmail/mailbox tool and must not be removed.
+
+## KeyCRM communications investigation — COMPLETE
+
+Do **not** repeat a long investigation of whether the current public KeyCRM OpenAPI exposes CRM-native communication history. This was completed on 2026-09-09 and is documented in:
 
 ```text
-n8n/gmail/SEARCH_EMAILS.json
+docs/M3_KEYCRM_COMMUNICATIONS_API.md
 ```
 
-`search_emails` remains a valid independent Gmail capability. Do not remove it simply because CRM communications are being added.
-
-## Exact next objective
-
-Do NOT close M3 yet.
-
-First determine what customer communications can be read from KeyCRM through supported, stable interfaces.
-
-Research the current official KeyCRM API documentation and verify against the real connected account. Specifically determine whether there are supported read endpoints for:
+Result:
 
 ```text
-customer/lead communications
-chat threads
-messages
-email messages stored in CRM
-WhatsApp / Instagram / other connected channel messages
-message direction
-timestamps
-manager/operator
-buyer_id / lead_id relation
-attachments if available
-pagination and filters
+official public OpenAPI communications read endpoint: NOT AVAILABLE
+official buyer communications include:              NOT AVAILABLE
+official chat/message webhook event:                 NOT AVAILABLE
 ```
 
-Do not assume an endpoint exists based only on the KeyCRM UI. Verify official API support and then safely probe the real account with GET only.
+The exact OpenAPI document loaded by `https://docs.keycrm.app/` was inspected. It contains no documented communications/chats/messages/conversations resource.
 
-If a supported API exists, design a universal read-only tool such as:
+`GET /buyer/{buyerId}` documents only these includes:
 
 ```text
-get_customer_communications
+manager
+shipping
+company
+loyalty
+custom_fields
 ```
 
-Preferred conceptual input:
-
-```json
-{
-  "buyer_id": 12345,
-  "lead_id": 67890,
-  "limit": 50
-}
-```
-
-Exact contract must follow what the official API actually supports; do not invent parameters.
-
-Preferred normalized result, only if supported by provider data:
+The official outgoing webhook documentation currently exposes only:
 
 ```text
-channel
-created_at
-direction
-manager/operator
-text
-subject (for email, if available)
-message/thread ids
-related buyer/lead
-attachment metadata
+order.change_order_status
+order.change_payment_status
+lead.change_lead_status
 ```
 
-The model-facing request `покажи переписку с клиентом` should resolve the customer in KeyCRM and then query KeyCRM communications first. Gmail should remain a separate source for explicit Gmail/mailbox questions or as an additional source only when the user's request calls for it.
+KeyCRM UI does have chats and multi-channel communication, but UI visibility is not evidence of public API support.
 
-If official KeyCRM API does NOT expose communications, document that limitation clearly before considering any private/internal UI endpoint. Do not silently scrape or rely on unstable internal endpoints as production architecture.
+## Required architecture boundary
 
-## M3 closure condition revised
-
-M3 should close only after:
-
-1. The CRM-native communications capability is either implemented through a supported API and natural-language tested, OR its official API unavailability is conclusively documented.
-2. The final customer-context demo uses the correct architecture.
-3. GitHub docs and workflow exports are synchronized.
-
-A good final demo, if CRM communications are available, is:
+Generic request:
 
 ```text
-Найди клиента <name> в CRM, покажи его актуальные данные и последние сообщения/переписку с ним.
+"show communication/history with this customer"
 ```
 
-Expected chain:
+must **not** silently become:
 
 ```text
-search_customers
--> get_customer_details
--> get_customer_communications
--> one combined CRM-grounded answer
+customer email -> Gmail
 ```
 
-Gmail should not be forced into this chain unless the user explicitly asks for Gmail/email outside the CRM communication history.
-
-## After M3
-
-M4 Controlled Writes remains future work:
+Correct current semantics:
 
 ```text
-separate write-tool class
-explicit user approval
-idempotency
-send_email
-create_calendar_event
-one safe CRM write
+explicit Gmail/mailbox request
+-> search_emails
+-> Gmail
+
+CRM-native communication/history request
+-> current public KeyCRM API cannot supply it
+-> report provider limitation
 ```
 
-Do not start M4 until M3 communications/context behavior is resolved and accepted.
+Do not:
+
+- invent `/messages`, `/chats`, or other guessed endpoints;
+- scrape the KeyCRM UI;
+- use private/internal UI endpoints as production architecture without a separate explicit decision;
+- fabricate CRM communication content;
+- silently treat Gmail as KeyCRM-native history.
+
+## M3 status and exact next decision
+
+M3 is intentionally still open.
+
+The communications API research itself is done. `get_customer_communications` was not implemented because there is no supported provider operation behind it.
+
+Do not start M4 yet.
+
+The next project decision is one of these:
+
+1. keep M3 open until keyCRM publishes a supported communications read API; or
+2. explicitly accept the documented provider limitation as the M3 closure condition, then update the milestone status and only afterward proceed to M4.
+
+Do not make that closure decision by silently introducing a private API workaround.
+
+If keyCRM later publishes an official stable communications API, then the next implementation should follow the normal read-only path:
+
+```text
+validate
+-> audit start
+-> official KeyCRM GET/read operation
+-> normalize
+-> audit finish
+-> return
+```
+
+with pagination, ambiguity handling, PII-redacted audit fields, and full MCP Server surface verification after integration.
+
+## General production rules
+
+- KeyCRM remains source of truth.
+- User-facing CRM tools remain read-only.
+- Internal sync may write only to local PostgreSQL infrastructure tables.
+- PostgreSQL model-facing credential `mcp_read` maps to role `mcp_readonly`.
+- `mcp_readonly` must remain SELECT-only.
+- `INVALID_INPUT` stays pre-audit.
+- Finish-audit mappings omit `arguments_json` entirely.
+- Do not weaken security/read-only gates.
+- Do not remove existing MCP tools.
+- After any future MCP Server change, verify the complete tool surface.
+- After any production workflow change: inspect -> modify -> deploy/publish -> health -> low-level test -> audit check -> natural-language E2E when relevant -> export exact production workflow -> sync GitHub.
+- Do not leave production newer than GitHub.
+- Do not trust the stale dirty local VPS checkout over connected GitHub.
