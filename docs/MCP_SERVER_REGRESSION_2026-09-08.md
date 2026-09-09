@@ -1,16 +1,18 @@
 # MCP Server Calendar Regression — 2026-09-08
 
+Status: CLOSED on 2026-09-09.
+
 ## Summary
 
 During post-acceptance inspection for `find_free_time`, the published production `MCP — Server` was found to contain `find_free_time` but to have lost the previously accepted `get_calendar_events` tool node.
 
 This was an aggregate MCP gateway regression, not a failure of either Calendar sub-workflow.
 
-## Recovery status
+## Recovery
 
-The missing `get_calendar_events` tool node has been restored in `MCP — Server` with the previously accepted configuration and the server has been published again.
+The missing `get_calendar_events` tool node was restored with its previously accepted configuration and `MCP — Server` was republished.
 
-Current production MCP Server version:
+Recovered production MCP Server:
 
 ```text
 workflow: MCP — Server
@@ -29,33 +31,68 @@ find_free_time
 
 Direct production inspection verified both tool nodes are connected to `MCP Server Trigger`.
 
-## `get_calendar_events`
+`n8n/MCP_SERVER.json` was synchronized with this recovered published production surface.
 
-Workflow: `MCP — Calendar Events`
+## Post-recovery regression acceptance
 
-Workflow ID: `IUpcFPRH3xOVbgEq`
+Final natural-language checks were run through Claude against the recovered aggregate MCP Server on 2026-09-09.
 
-Previously accepted behavior remains documented in `docs/CALENDAR_ACCEPTANCE.md`, including low-level success, `INVALID_INPUT`, provider 404 -> `NOT_FOUND`, audit finalization, and natural-language week/month/year queries.
+### `get_calendar_events`
 
-## `find_free_time`
+Natural request:
 
-Workflow: `MCP — Find Free Time`
+```text
+Что у меня завтра в календаре?
+```
 
-Workflow ID: `dDiqHH9C5clOrYOX`
+Claude invoked the MCP integration and reported that 2026-09-10 contained no events. This matched the real primary calendar.
 
-The tool passed a real natural-language E2E on 2026-09-08 for a 60-minute slot between 09:00 and 18:00. The corresponding `mcp_tool_calls` audit row finalized as `succeeded`.
+Production audit evidence:
 
-## Repository synchronization
+```text
+tool_name:   get_calendar_events
+status:      succeeded
+duration_ms: 606
+start:       2026-09-10T00:00:00+02:00
+end:         2026-09-11T00:00:00+02:00
+calendar_id: primary
+limit:       50
+```
 
-`n8n/MCP_SERVER.json` has now been synchronized with the recovered published production surface. The export contains both Calendar tools and references the current published MCP Server version.
+Status: PASS.
 
-## Remaining regression check
+### `find_free_time`
 
-The production structure is recovered and the repository is synchronized.
+Natural request:
 
-For strict post-recovery regression closure, rerun one natural-language request for each Calendar tool against the recovered MCP Server:
+```text
+Найди мне завтра свободное окно на 60 минут с 9:00 до 18:00.
+```
 
-1. `get_calendar_events`
-2. `find_free_time`
+Claude invoked `find_free_time` and reported that the full 09:00–18:00 window was free. This matched the real empty primary calendar.
 
-After both pass on the recovered aggregate surface, this regression can be considered fully closed and M2 can be marked complete without qualification.
+Production audit evidence:
+
+```text
+tool_name:        find_free_time
+status:           succeeded
+duration_ms:      450
+start:            2026-09-10T09:00:00+02:00
+end:              2026-09-10T18:00:00+02:00
+calendar_id:      primary
+duration_minutes: 60
+```
+
+Status: PASS.
+
+## Closure
+
+The original regression condition is no longer present:
+
+- both Calendar tools exist simultaneously in the same active published MCP Server version;
+- both are connected to the MCP trigger;
+- the production export is synchronized in GitHub;
+- both natural-language post-recovery regression tests passed;
+- both calls created successful completed audit rows.
+
+This regression is closed. M2 — Google Workspace expansion is complete.
