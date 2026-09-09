@@ -1,21 +1,12 @@
 # Current State
 
-Last verified: 2026-09-08.
+Last verified: 2026-09-09.
 
 ## Runtime
 
 Production n8n runtime: `2.37.10`.
 
-The runtime was upgraded from `2.33.3` on 2026-09-06 after `HTTP Request` nodes configured with `On Error -> Continue (using error output)` were observed to route a Google Drive 404 payload through the success output instead of the error output.
-
-Before the upgrade a full operational backup was created containing the PostgreSQL dump, n8n data archive, compose file, environment file, and SHA256 checksums.
-
-Post-upgrade checks passed:
-
-- container image: `n8nio/n8n:2.37.10`
-- `/healthz`: OK
-- public editor: HTTP 200
-- Google Drive 404 now follows the HTTP Request error output correctly
+Production was upgraded from `2.33.3` after an HTTP Request error-output routing defect was observed during Google Drive 404 acceptance. A full operational backup was created before the upgrade. Post-upgrade health checks and the Drive 404 regression passed.
 
 ## Deployed MCP gateway
 
@@ -27,10 +18,10 @@ Status: active.
 
 Authentication: n8n OAuth2 user authentication for the MCP endpoint.
 
-Current published version verified on 2026-09-08:
+Current published production version:
 
 ```text
-version_id: 07843872-4ab5-46f1-8df9-9a6bc8418673
+version_id:        07843872-4ab5-46f1-8df9-9a6bc8418673
 active_version_id: 07843872-4ab5-46f1-8df9-9a6bc8418673
 ```
 
@@ -48,15 +39,15 @@ Current published tool surface:
 
 Legacy tools `hello_world` and `get_person` remain removed.
 
-A Calendar gateway regression discovered on 2026-09-08 temporarily left the aggregate MCP Server without `get_calendar_events` after `find_free_time` was added. The missing tool has now been restored, both Calendar tools are present in the same active published version, both are connected to `MCP Server Trigger`, and `n8n/MCP_SERVER.json` has been synchronized with the recovered production surface.
-
-The regression record is maintained in `docs/MCP_SERVER_REGRESSION_2026-09-08.md`.
+The current repository export `n8n/MCP_SERVER.json` contains the same recovered production surface, including both Calendar tools.
 
 ## Milestone status
 
+M0 — Foundation: complete.
+
 M1 — Production cleanup: complete.
 
-M2 — Google Workspace expansion: in progress; only final post-recovery natural-language gateway regression checks remain.
+M2 — Google Workspace expansion: complete.
 
 Completed M2 tools:
 
@@ -66,9 +57,11 @@ Completed M2 tools:
 - `get_calendar_events`
 - `find_free_time`
 
-Structural Calendar gateway recovery is complete. M2 is not marked fully complete until one fresh natural-language request for `get_calendar_events` and one fresh natural-language request for `find_free_time` pass against the recovered aggregate MCP Server version.
+No write-capable business behavior is exposed in M2.
 
-No write-capable behavior is exposed in M2.
+A Calendar gateway regression discovered on 2026-09-08 temporarily removed `get_calendar_events` after `find_free_time` was added to the aggregate MCP Server. The missing tool was restored, the server was republished, the GitHub export was synchronized, and post-recovery natural-language regression acceptance passed for both Calendar tools on 2026-09-09. The regression is closed in `docs/MCP_SERVER_REGRESSION_2026-09-08.md`.
+
+Next milestone: M3 — CRM integration.
 
 ## Normalized MCP contract
 
@@ -126,13 +119,11 @@ Validate input
  -> Return original MCP response
 ```
 
-`Audit start` stores sanitized arguments and returns `audit_id` plus `started_at`. `Audit finish` finalizes the same row with `succeeded|failed`, normalized error data, duration, and completion timestamp.
-
 `INVALID_INPUT` remains before `Audit start` and therefore does not create an audit row.
 
-Sensitive-argument sanitization remains centralized in `MCP — Audit Tool Call`. Gmail search queries are always stored as `[REDACTED]`; credential/session-style keys are recursively redacted. Historical raw Gmail-query audit values were backfilled by `database/migrations/002_redact_existing_email_audit_queries.sql`.
-
 All finish-audit subworkflow calls omit `arguments_json`; only audit start writes call arguments.
+
+Sensitive-argument sanitization remains centralized. Gmail search queries are stored as `[REDACTED]`; credential/session-style keys are recursively redacted.
 
 ## Gmail
 
@@ -140,33 +131,29 @@ All finish-audit subworkflow calls omit `arguments_json`; only audit start write
 
 Workflow: `MCP — Gmail Search`
 
-Status: active and exposed through `MCP — Server`.
+Status: active and exposed.
 
 Inputs:
 
 - `query` — required non-empty Gmail search string
 - `limit` — optional integer, default `5`, range `1..50`
 
-The Gmail search query is passed through `filters.q`. Output messages include `id`, `threadId`, `from`, `to`, `subject`, `date`, and `body`.
-
 ### `get_email_attachment`
 
 Workflow: `MCP — Gmail Attachment`
 
-Status: active and exposed through `MCP — Server`.
+Status: active and exposed.
 
 Public inputs:
 
-- `message_id` — required; normally obtained internally from `search_emails`
+- `message_id` — required; normally obtained from `search_emails`
 - `filename` — optional exact or partial filename hint
 
-The user is never required to know or provide Gmail `attachmentId`.
-
-The workflow recursively traverses MIME parts, discovers the real Gmail `body.attachmentId` internally, downloads the selected attachment, converts Gmail base64url to standard base64, and returns filename, MIME type, size, and `content_base64`.
+Gmail `attachmentId` is discovered internally and is never required from the user.
 
 ## Google Drive
 
-Dedicated OAuth credential: `Google Drive MCP readonly`.
+Credential: `Google Drive MCP readonly`
 
 Scope:
 
@@ -178,27 +165,20 @@ https://www.googleapis.com/auth/drive.readonly
 
 Workflow: `MCP — Drive Search`
 
-Status: active and exposed through `MCP — Server`.
+Status: active and exposed.
 
 Inputs:
 
 - `query` — required natural search term
 - `limit` — optional integer, default `10`, range `1..50`
 
-The workflow builds a Google Drive query internally and searches filename or full-text content while excluding trashed files.
-
-Verified cases:
-
-- normal search returning real Drive files
-- invalid limit -> `INVALID_INPUT`
-- nonexistent query -> `success=true`, empty `data`, `count=0`
-- natural MCP client search for `TikTok Video Pipeline` returned real matching Google Drive files
+No matches are a successful empty result.
 
 ### `read_drive_file`
 
 Workflow: `MCP — Drive Read File`
 
-Status: active and exposed through `MCP — Server`.
+Status: active and exposed.
 
 Input:
 
@@ -206,30 +186,19 @@ Input:
 
 Supported content types:
 
-- Google Docs -> exported as `text/plain`
-- Google Sheets -> exported as `text/csv`
-- Google Slides -> exported as `text/plain`
-- PDF -> downloaded and text extracted
-- text-based regular files -> downloaded as text
+- Google Docs -> `text/plain`
+- Google Sheets -> `text/csv`
+- Google Slides -> `text/plain`
+- PDF -> extracted text
+- text-based regular files -> text
 
-Text output is capped at `50000` characters. The response includes `truncated` and `original_content_length` so truncation is explicit rather than silent.
+Text is capped at `50000` characters with explicit truncation metadata. Unsupported binaries return `UNSUPPORTED_FILE_TYPE`. Missing files return `NOT_FOUND`.
 
-Unsupported binary types return `UNSUPPORTED_FILE_TYPE`.
-
-Verified low-level cases include Google Sheet, PDF, TXT/Markdown, Google Doc, Google Slides, unsupported MOV, invalid `file_id`, and nonexistent `file_id` -> `NOT_FOUND`.
-
-Natural-language cross-tool acceptance is complete for:
-
-```text
-search_drive_files
- -> select real result
- -> read_drive_file(file_id)
- -> client summary
-```
+Natural cross-tool acceptance for search -> read -> client summary is complete.
 
 ## Google Calendar
 
-Dedicated OAuth credential: `Google Calendar MCP readonly`.
+Credential: `Google Calendar MCP readonly`
 
 Scope:
 
@@ -241,9 +210,9 @@ https://www.googleapis.com/auth/calendar.readonly
 
 Workflow: `MCP — Calendar Events`
 
-Workflow ID: `IUpcFPRH3xOVbgEq`.
+Workflow ID: `IUpcFPRH3xOVbgEq`
 
-Status: active, published, exposed through `MCP — Server`, and previously accepted end to end.
+Status: active, published, exposed, and accepted end to end.
 
 Inputs:
 
@@ -252,31 +221,49 @@ Inputs:
 - `calendar_id` — optional string, defaults to `primary`
 - `limit` — optional integer, defaults to `50`, range `1..2500`
 
-The provider call uses `singleEvents=true` and `orderBy=startTime`. Timed events preserve `dateTime`; all-day events preserve `date`.
+Provider behavior uses `singleEvents=true` and `orderBy=startTime`. Timed and all-day events preserve their respective Calendar fields.
 
-Accepted cases:
+Accepted cases include:
 
-- empty input -> `INVALID_INPUT`
-- valid `primary` window -> normalized `success=true`
+- invalid input -> `INVALID_INPUT`
+- valid primary window -> normalized success
 - nonexistent calendar -> provider 404 -> `NOT_FOUND`
-- succeeded and failed audit rows finalized with non-null duration
-- natural-language week, month, and year queries through Claude
+- succeeded/failed audit finalization
+- natural week/month/year queries
+- final post-recovery gateway regression request on 2026-09-09
 
-Detailed acceptance evidence: `docs/CALENDAR_ACCEPTANCE.md`.
+Final post-recovery request:
+
+```text
+Что у меня завтра в календаре?
+```
+
+Resolved tool arguments:
+
+```text
+start:       2026-09-10T00:00:00+02:00
+end:         2026-09-11T00:00:00+02:00
+calendar_id: primary
+limit:       50
+```
+
+The real primary calendar was empty; Claude reported no events. Audit row: `succeeded`, `duration_ms=606`.
+
+Detailed acceptance: `docs/CALENDAR_ACCEPTANCE.md` and `docs/ACCEPTANCE_TESTS.md`.
 
 ### `find_free_time`
 
 Workflow: `MCP — Find Free Time`
 
-Workflow ID: `dDiqHH9C5clOrYOX`.
+Workflow ID: `dDiqHH9C5clOrYOX`
 
-Status: active, published, exposed through `MCP — Server`, and accepted through a natural-language MCP request.
+Status: active, published, exposed, and accepted end to end.
 
 Inputs:
 
 - `start` — required RFC3339 timestamp with timezone
 - `end` — required RFC3339 timestamp with timezone and later than `start`
-- `duration_minutes` — optional positive integer, defaults to `30`, must fit within the requested window
+- `duration_minutes` — optional positive integer, defaults to `30`, must fit inside the requested window
 - `calendar_id` — optional string, defaults to `primary`
 
 Provider endpoint:
@@ -285,35 +272,32 @@ Provider endpoint:
 POST https://www.googleapis.com/calendar/v3/freeBusy
 ```
 
-The workflow:
+The workflow validates input, starts audit, calls FreeBusy, rejects per-calendar provider errors, clips/merges busy intervals, computes maximal qualifying free windows, finalizes audit, and returns the normalized business result.
 
-1. validates the requested window and duration;
-2. starts the audit row;
-3. requests Google Calendar FreeBusy data;
-4. rejects per-calendar provider errors even when the HTTP response itself is 200;
-5. clips and merges overlapping busy intervals;
-6. computes maximal free windows;
-7. keeps only windows at least `duration_minutes` long;
-8. finalizes audit success/error;
-9. returns the original normalized MCP response.
-
-Natural-language E2E acceptance on 2026-09-08:
+Final post-recovery request on 2026-09-09:
 
 ```text
 Найди мне завтра свободное окно на 60 минут с 9:00 до 18:00.
 ```
 
-The primary calendar was empty, so the returned free interval covered the full requested window. The corresponding `mcp_tool_calls` row finalized as `succeeded` with `duration_ms=640`.
+Resolved tool arguments:
 
-Detailed acceptance evidence: `docs/FIND_FREE_TIME_ACCEPTANCE.md`.
+```text
+start:            2026-09-10T09:00:00+02:00
+end:              2026-09-10T18:00:00+02:00
+calendar_id:      primary
+duration_minutes: 60
+```
+
+The real primary calendar was empty, so Claude reported the full 09:00–18:00 interval as available. Audit row: `succeeded`, `duration_ms=450`.
+
+Detailed acceptance: `docs/FIND_FREE_TIME_ACCEPTANCE.md` and `docs/ACCEPTANCE_TESTS.md`.
 
 ## GitHub
 
 Workflow: `MCP — GitHub Read File`
 
 Status: active and exposed.
-
-Input: repository-relative `path`.
 
 Missing files normalize to `NOT_FOUND`; other provider failures use `UPSTREAM_ERROR`.
 
@@ -335,7 +319,7 @@ Zero-row results normalize to `NOT_FOUND`. Database failures normalize to `UPSTR
 
 ## Repository export state
 
-Current deployed workflow exports include:
+Current workflow exports include:
 
 - `n8n/MCP_SERVER.json`
 - `n8n/AUDIT_TOOL_CALL.json`
@@ -349,28 +333,27 @@ Current deployed workflow exports include:
 - `n8n/calendar/GET_CALENDAR_EVENTS.json`
 - `n8n/calendar/FIND_FREE_TIME.json`
 
-`n8n/MCP_SERVER.json` now contains both Calendar tools and references published version `07843872-4ab5-46f1-8df9-9a6bc8418673`.
-
 Audit migrations:
 
 - `database/migrations/001_mcp_tool_audit.sql`
 - `database/migrations/002_redact_existing_email_audit_queries.sql`
 
-The exports reference n8n credentials by credential metadata only; no plaintext credential values are intentionally stored in the repository.
+Credential values are not intentionally stored in repository exports.
 
 ## Security state
 
 - Gmail, GitHub, Google Drive, and Google Calendar credentials remain in n8n credential storage.
-- Google Drive uses a dedicated read-only OAuth scope.
-- Google Calendar uses the dedicated `calendar.readonly` OAuth scope.
+- Drive and Calendar use dedicated read-only OAuth scopes.
 - PostgreSQL business-read tools use the read-only `mcp_read` credential.
-- The centralized audit workflow uses the write-capable application PostgreSQL credential only for `mcp_tool_calls` writes.
+- The centralized audit workflow uses the write-capable application PostgreSQL credential only for audit writes.
 - No write-capable business tool is exposed through MCP.
 - Sensitive audit arguments are sanitized centrally.
-- Gmail `attachmentId` remains an internal implementation detail and is not required from the user.
 
 ## Exact next milestone
 
-1. Run one fresh natural-language `get_calendar_events` request against the recovered MCP Server.
-2. Run one fresh natural-language `find_free_time` request against the same recovered MCP Server.
-3. If both pass, close `docs/MCP_SERVER_REGRESSION_2026-09-08.md`, mark M2 complete, and move to M3 CRM integration.
+M3 — CRM integration:
+
+1. define the CRM provider and read-only auth boundary;
+2. implement `search_customers(query, limit)`;
+3. implement `get_customer_details(customer_id)`;
+4. run a cross-system customer context demo without introducing write capability.
