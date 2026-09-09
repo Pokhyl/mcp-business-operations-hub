@@ -1,6 +1,6 @@
 # MCP Tools
 
-Production acceptance cases and regression rules for the current tool surface are documented in `docs/ACCEPTANCE_TESTS.md`. KeyCRM M3 evidence is in `docs/M3_KEYCRM_ACCEPTANCE.md`, `docs/M3_MANAGER_STATS_ACCEPTANCE.md`, and `docs/M3_MANAGER_ANALYTICS_ACCEPTANCE.md`.
+Production acceptance cases and regression rules for the current tool surface are documented in `docs/ACCEPTANCE_TESTS.md`. KeyCRM M3 evidence is in `docs/M3_KEYCRM_ACCEPTANCE.md`, `docs/M3_MANAGER_STATS_ACCEPTANCE.md`, `docs/M3_MANAGER_ANALYTICS_ACCEPTANCE.md`, and `docs/M3_KEYCRM_COMMUNICATIONS_API.md`.
 
 All model-facing tools are read-only unless explicitly documented otherwise. No write-capable business tool is currently exposed through MCP.
 
@@ -8,7 +8,7 @@ All model-facing tools are read-only unless explicitly documented otherwise. No 
 
 ### `search_emails`
 
-Purpose: search Gmail and return normalized matching messages.
+Purpose: search the connected Gmail mailbox and return normalized matching messages.
 
 Inputs:
 
@@ -22,6 +22,8 @@ Inputs:
 Output per message includes `id`, `threadId`, `from`, `to`, `subject`, `date`, and `body`.
 
 Audit note: the Gmail query is used for the provider request but stored as `[REDACTED]` in audit `arguments_json`.
+
+Semantic boundary: this is a Gmail/mailbox tool. It must not be presented as the source of generic KeyCRM-native customer communication history unless the user explicitly asks for Gmail or explicitly requests Gmail as an additional source.
 
 ### `get_email_attachment`
 
@@ -222,6 +224,35 @@ missing buyer    -> NOT_FOUND
 other API error  -> UPSTREAM_ERROR
 ```
 
+### CRM-native communications — currently unavailable through public OpenAPI
+
+There is currently **no** production `get_customer_communications` tool.
+
+Investigation on 2026-09-09 of the current official keyCRM OpenAPI v1.2.0 found no supported read endpoint for communications/chats/messages/conversations. `GET /buyer/{buyerId}` supports only these documented includes:
+
+```text
+manager
+shipping
+company
+loyalty
+custom_fields
+```
+
+The official outgoing webhook surface also does not expose a chat/message event.
+
+Therefore generic requests such as:
+
+```text
+покажи переписку с клиентом
+покажи последние сообщения с клиентом
+```
+
+must not silently route to `search_emails`. Gmail remains appropriate only for explicit Gmail/mailbox requests or when the user explicitly asks for Gmail as an additional source.
+
+Do not implement a communications tool against guessed paths, scraped UI content, or private/internal UI endpoints without a separate architecture/security decision.
+
+Evidence: `docs/M3_KEYCRM_COMMUNICATIONS_API.md`.
+
 ### `get_manager_customer_stats`
 
 Workflow: `MCP — KeyCRM Manager Customer Stats` (`KcrmMgrStatsA7pQ4Z`).
@@ -403,6 +434,8 @@ Pipeline-card synchronization also records observed manager/source changes into 
 Detailed manager analytics evidence is in `docs/M3_MANAGER_ANALYTICS_ACCEPTANCE.md`.
 
 ## Write tools — future separate approval class
+
+M4 is not started.
 
 Examples:
 
