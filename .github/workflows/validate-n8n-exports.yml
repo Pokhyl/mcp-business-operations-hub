@@ -1,0 +1,31 @@
+name: Validate n8n exports
+
+on:
+  push:
+    paths:
+      - "n8n/**/*.json"
+      - "scripts/validate_n8n_exports.py"
+      - ".github/workflows/validate-n8n-exports.yml"
+  pull_request:
+    paths:
+      - "n8n/**/*.json"
+      - "scripts/validate_n8n_exports.py"
+      - ".github/workflows/validate-n8n-exports.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate exported n8n workflows
+        run: python scripts/validate_n8n_exports.py
