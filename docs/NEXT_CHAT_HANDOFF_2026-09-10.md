@@ -12,17 +12,15 @@ GitHub is the source of truth. If chat history or a VPS checkout disagrees with 
 
 ## Read first
 
-Before continuing, read:
-
 ```text
 docs/CURRENT_STATE.md
 docs/ROADMAP.md
 docs/ARCHITECTURE.md
+docs/PORTFOLIO_ARCHITECTURE.md
 docs/MCP_TOOLS.md
-docs/M3_KEYCRM_ACCEPTANCE.md
-docs/M3_MANAGER_STATS_ACCEPTANCE.md
-docs/M3_MANAGER_ANALYTICS_ACCEPTANCE.md
-docs/M3_KEYCRM_COMMUNICATIONS_API.md
+docs/SECURITY.md
+docs/RUNBOOK.md
+examples/README.md
 ```
 
 ## Production
@@ -41,7 +39,7 @@ authentication: n8n OAuth2
 status: active
 ```
 
-Current published MCP tool surface remains 17 tools:
+Current published MCP tool surface remains 17 read-only tools:
 
 ```text
 get_github_file
@@ -63,125 +61,114 @@ get_manager_assignment_history
 get_manager_call_timeline
 ```
 
+No production workflow was changed during the current M5 work.
+
 ## Milestone status
 
 ```text
-M0 Foundation                 complete
-M1 Production cleanup         complete
-M2 Google Workspace expansion complete
-M3 CRM integration            complete
-M4 Controlled writes          deferred / not started
-M5 Portfolio hardening        not started
+M0 Foundation                  complete
+M1 Production cleanup          complete
+M2 Google Workspace expansion  complete
+M3 CRM integration             complete
+M4 Controlled writes           deferred / not started
+M5 Portfolio hardening         in progress
 ```
 
-M3 was explicitly closed on 2026-09-10.
+M3 is closed. The missing public KeyCRM communications API is an accepted provider limitation, not an unfinished M3 task.
 
-On 2026-09-10 the user also explicitly decided to stop KeyCRM work for now and leave M4/write integrations for later. Do not resume KeyCRM development, credential/scope changes, Gmail/Calendar writes, or CRM writes unless the user explicitly reopens that work.
+M4 is explicitly deferred. Do not resume KeyCRM development, write credentials/scopes, Gmail/Calendar writes, or CRM mutations unless the user explicitly reopens M4.
 
-## M3 closure boundary
+## M5 completed in this pass
 
-The current official KeyCRM OpenAPI v1.2.0 does not expose CRM-native communications/chats/messages/conversations through a supported public read endpoint.
+### Recruiter-facing README
 
-Investigation result:
+`README.md` was rewritten to reflect the actual current project rather than the old M2/7-tool state.
+
+It now presents:
+
+- 17 production read-only MCP tools;
+- n8n/PostgreSQL/OAuth2/Google Workspace/GitHub/KeyCRM stack;
+- architecture and security boundaries;
+- synchronization/read-model design;
+- real classes of production defects caught during acceptance;
+- explicit KeyCRM provider limitations;
+- current M0-M5 milestone status.
+
+### Portfolio architecture
+
+Created:
 
 ```text
-public communications read endpoint: NOT AVAILABLE
-buyer communications include:        NOT AVAILABLE
-chat/message webhook event:           NOT AVAILABLE
+docs/PORTFOLIO_ARCHITECTURE.md
 ```
 
-`get_customer_communications` was intentionally not implemented. This is an accepted provider limitation, not an unfinished M3 task.
+It contains a GitHub-rendered Mermaid architecture diagram plus concise recruiter/interview-level explanation of the gateway, isolated tool workflows, APIs, PostgreSQL read models, internal sync, audit path, credential boundary, and KeyCRM limitation.
 
-Required semantics remain:
+### Sanitized portfolio examples
+
+Created:
 
 ```text
-explicit Gmail/mailbox request
--> search_emails
--> Gmail
-
-CRM-native communication/history request
--> current public KeyCRM API cannot supply it
--> report provider limitation
+examples/README.md
 ```
 
-Do not silently substitute Gmail for CRM-native history. Do not invent KeyCRM `/messages` or `/chats` endpoints, scrape the KeyCRM UI, or use private/internal UI APIs without a separate explicit architecture/security decision.
+Examples cover Gmail, Drive, Calendar, job diagnosis, customer lookup, manager analytics, call timeline, and the correct provider-limitation behavior. PII and real business metrics are not published; representative demo values are explicitly marked synthetic.
 
-## Existing CRM state
+### Automated workflow JSON validation
 
-Customer index:
+Created:
 
 ```text
-public.keycrm_customers
+scripts/validate_n8n_exports.py
+.github/workflows/validate-n8n-exports.yml
 ```
 
-Permanent customer sync:
+The dependency-free validator checks all `n8n/**/*.json` exports for valid JSON and core workflow structure, including node uniqueness and connection references.
+
+GitHub Actions run `Validate n8n exports` run #1 completed successfully on the current exports.
+
+### Deployment/operations runbook
+
+Created:
 
 ```text
-ADMIN — KeyCRM Customer Index Incremental Sync
-workflow_id: KCIuipW0TTnCMxkY
-schedule: every 15 minutes
+docs/RUNBOOK.md
 ```
 
-Manager analytics tables:
+It records source-of-truth rules, safe workflow release sequence, health/acceptance/audit requirements, database migration boundaries, sync integrity rules, runtime-change procedure, rollback principles, M4 deferral, and CI validation.
+
+## Remaining M5 work
+
+Only the planned short demo video/GIF remains incomplete in the roadmap.
+
+Do not fake a production demo with invented data. The next step is to prepare/use a sanitized recording sequence that demonstrates real MCP behavior without exposing:
 
 ```text
-public.keycrm_pipeline_cards
-public.keycrm_pipelines
-public.keycrm_sources
-public.keycrm_users
-public.keycrm_pipeline_assignment_events
-public.keycrm_pipeline_tracking_meta
+mailbox contents
+customer PII
+credentials/tokens
+confidential CRM metrics
 ```
 
-Permanent pipeline-card sync:
+The video/GIF should be short and recruiter-facing rather than a full technical walkthrough.
 
-```text
-ADMIN — KeyCRM Pipeline Card Index Incremental Sync
-workflow_id: KcrmPipelineIncrementalA1
-schedule: every 15 minutes
-```
+## Retained security/read-only rules
 
-Assignment-history tracking boundary:
-
-```text
-2026-09-09T18:37:30.384Z
-```
-
-Do not infer historical initiators or pre-tracking assignment history.
-
-## Security/read-only rules retained
-
+- Current model-facing business tools remain read-only.
 - KeyCRM remains source of truth.
-- Existing user-facing CRM tools remain read-only.
 - Internal sync may write only to local PostgreSQL infrastructure tables.
-- Model-facing PostgreSQL credential `mcp_read` maps to `mcp_readonly`.
+- Model-facing PostgreSQL credential maps to `mcp_readonly`.
 - `mcp_readonly` remains SELECT-only on business-read tables.
 - `INVALID_INPUT` remains pre-audit.
 - Finish-audit mappings omit `arguments_json` entirely.
 - Sensitive search arguments remain redacted.
 - Do not remove existing MCP tools.
 - After any MCP Server edit, verify the complete tool surface.
+- Do not invent unsupported provider endpoints.
 
-## Deferred M4 scope
+## Production change sequence
 
-M4 Controlled Writes is intentionally deferred and has not started.
-
-Planned future scope remains:
-
-```text
-separate write-tool class
-explicit user approval
-idempotency
-send_email
-create_calendar_event
-one safe CRM write operation
-```
-
-Do not start M4 automatically in a future chat. Resume it only after an explicit user instruction.
-
-When M4 is resumed, first verify the actual production OAuth scopes/credentials separately from API capability; do not assume that an API-supported write is already authorized by existing read-only credentials.
-
-After any production workflow change:
+After any future production workflow change:
 
 ```text
 inspect
@@ -191,6 +178,7 @@ inspect
 -> low-level test
 -> audit check
 -> natural-language E2E when relevant
+-> verify complete gateway surface when applicable
 -> export exact production workflow
 -> sync GitHub
 ```
