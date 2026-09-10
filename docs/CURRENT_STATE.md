@@ -49,24 +49,64 @@ get_manager_call_timeline
 
 Total: 17 tools.
 
-No gateway/workflow change was required to close M3 on 2026-09-10. The KeyCRM communications investigation established a provider limitation rather than an implementation defect.
+No production MCP workflow change was required for the 2026-09-10 M3 closure or the current M5 documentation/CI work.
 
 ## Milestones
 
 ```text
-M0 Foundation                 complete
-M1 Production cleanup         complete
-M2 Google Workspace expansion complete
-M3 CRM integration            complete
-M4 Controlled writes          deferred / not started
-M5 Portfolio hardening        not started
+M0 Foundation                  complete
+M1 Production cleanup          complete
+M2 Google Workspace expansion  complete
+M3 CRM integration             complete
+M4 Controlled writes           deferred / not started
+M5 Portfolio hardening         in progress
 ```
 
 M3 was explicitly closed on 2026-09-10 with the current KeyCRM communications limitation accepted as a provider boundary.
 
 On 2026-09-10 the user explicitly decided to close KeyCRM work for now and leave M4/write integrations for later. Therefore no further KeyCRM development, OAuth/write-scope changes, Gmail/Calendar writes, or CRM write tools should be started unless the user explicitly resumes that scope.
 
-The accepted M3 scope includes deployed read-only CRM customer search/details, manager customer/call statistics, sales/lead analytics, observed reassignment history, and call timeline. The existing CRM tools passed low-level and natural-language acceptance where applicable.
+## M5 portfolio hardening progress
+
+Completed on 2026-09-10 without changing production behavior:
+
+```text
+recruiter-facing README              complete
+portfolio architecture diagram      complete (GitHub-rendered Mermaid)
+sanitized portfolio examples        complete
+automated n8n export validation     complete
+deployment/operations runbook       complete
+short demo video/GIF                remaining
+```
+
+Portfolio architecture:
+
+```text
+docs/PORTFOLIO_ARCHITECTURE.md
+```
+
+Sanitized examples:
+
+```text
+examples/README.md
+```
+
+Operations runbook:
+
+```text
+docs/RUNBOOK.md
+```
+
+Workflow export validation:
+
+```text
+scripts/validate_n8n_exports.py
+.github/workflows/validate-n8n-exports.yml
+```
+
+The first GitHub Actions run of `Validate n8n exports` completed successfully against the current committed workflow exports.
+
+The remaining M5 deliverable is a short demo video/GIF. Any demo must avoid exposing mailbox contents, customer PII, credentials/tokens, or confidential production metrics.
 
 ## M3 communications closure decision
 
@@ -237,28 +277,6 @@ schedule: every 15 minutes
 
 The full bootstrap was reconciled against KeyCRM after shifting page boundaries caused 22 historical cards to be missed. The exact missing records were recovered and provider/local totals matched before manager analytics acceptance.
 
-Accepted August 2026 example for Ilona Kamuz:
-
-```text
-total_leads_raw:                  646
-duplicate_leads:                  165
-total_leads_excluding_duplicates: 481
-successful_sales:                  76
-conversion_percent_raw:           11.76
-conversion_percent_excluding_duplicates: 15.80
-successful_payments_total:      82760
-```
-
-Accepted call-timeline example:
-
-```text
-total_calls:                    78
-average_positive_gap_minutes:  4.5
-longest_gap_minutes:          41.2
-gaps_over_15_minutes:           6
-gaps_over_30_minutes:           1
-```
-
 ## Assignment-history limitation
 
 KeyCRM UI stores an Action History, but the public KeyCRM OpenAPI does not expose the historical assignment action log used by the UI.
@@ -303,34 +321,35 @@ n8n/gmail/SEARCH_EMAILS.json
 - Business-read tools use `mcp_readonly`.
 - No unsupported KeyCRM communications endpoint was introduced.
 - No M4 write credential/scope changes have been made.
+- M5 changes so far are repository documentation/validation changes only; production runtime/workflows were not modified.
 
 ## Repository evidence
 
 Key files:
 
 ```text
+README.md
 docs/ROADMAP.md
 docs/ARCHITECTURE.md
+docs/PORTFOLIO_ARCHITECTURE.md
+docs/RUNBOOK.md
 docs/MCP_TOOLS.md
 docs/M3_KEYCRM_ACCEPTANCE.md
 docs/M3_MANAGER_STATS_ACCEPTANCE.md
 docs/M3_MANAGER_ANALYTICS_ACCEPTANCE.md
 docs/M3_KEYCRM_COMMUNICATIONS_API.md
 docs/NEXT_CHAT_HANDOFF_2026-09-10.md
-database/migrations/003_keycrm_customer_index.sql
-database/migrations/004_keycrm_manager_id.sql
-database/migrations/005_keycrm_manager_analytics.sql
-n8n/gmail/SEARCH_EMAILS.json
+examples/README.md
+scripts/validate_n8n_exports.py
+.github/workflows/validate-n8n-exports.yml
 ```
 
 ## Exact next step
 
-There is no active KeyCRM/M4 implementation step.
+Continue M5, not M4.
 
-M3 is complete and KeyCRM work is closed for now. M4 Controlled Writes remains planned but is explicitly deferred by the user.
+The remaining portfolio deliverable is the short demo video/GIF. Before recording, prepare a sanitized demo sequence that proves MCP behavior without exposing real mailbox contents, customer PII, credentials, or confidential CRM metrics.
 
-Do not automatically start credential/scope changes, `send_email`, `create_calendar_event`, or a KeyCRM write operation in a future chat. Resume M4 only after an explicit user instruction.
+M4 Controlled Writes remains explicitly deferred. Do not automatically start credential/scope changes, `send_email`, `create_calendar_event`, or a KeyCRM write operation.
 
-When M4 is resumed, first verify the actual production OAuth scopes/credentials separately from API capability. Existing read-only credentials must not be silently broadened.
-
-If KeyCRM later publishes an official stable customer-communications read API, that capability can be considered as a separate future enhancement without invalidating the completed M3 milestone.
+If M4 is resumed later, first verify the actual production OAuth scopes/credentials separately from API capability. Existing read-only credentials must not be silently broadened.
