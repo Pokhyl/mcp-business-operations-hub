@@ -1,12 +1,14 @@
 # M3 KeyCRM acceptance
 
-Last verified: 2026-09-09.
+Last verified: 2026-09-10.
+
+Status: COMPLETE.
 
 ## Scope
 
-M3 adds read-only CRM access through KeyCRM while preserving the project rule that MCP tools do not mutate business systems.
+M3 provides read-only CRM integration through KeyCRM while preserving the project rule that model-facing business tools do not mutate business systems.
 
-KeyCRM remains the source of truth. A local PostgreSQL customer index is used only to make natural customer search practical, because the KeyCRM `/buyer` API does not support a general name search filter.
+KeyCRM remains the source of truth. Local PostgreSQL tables are used only for search/analytics support where repeated live provider scans would be impractical.
 
 ## Provider boundary
 
@@ -18,32 +20,38 @@ https://openapi.keycrm.app/v1
 
 Authentication uses the n8n Bearer credential `KeyCRM MCP`.
 
-The customer-facing MCP workflows use GET requests only. The synchronization workflow writes only to the local PostgreSQL index and never writes to KeyCRM.
+Current model-facing KeyCRM workflows use GET/read operations only. Internal synchronization writes only to local PostgreSQL infrastructure tables.
 
-The documented KeyCRM API limit is 20 requests per minute. Bootstrap and pagination are paced below that limit.
+The documented KeyCRM API limit remains 20 requests per minute; bootstrap and pagination paths are paced below that limit.
 
-## Local search index
+## Customer search and details acceptance
 
-Table:
+Customer search index:
 
 ```text
 public.keycrm_customers
 ```
 
-Stored fields are intentionally minimal:
+Minimal indexed fields:
 
-- `buyer_id`
-- `full_name`
-- `phones[]`
-- `emails[]`
-- `keycrm_updated_at`
-- `synced_at`
+```text
+buyer_id
+full_name
+phones[]
+emails[]
+keycrm_updated_at
+manager_id
+synced_at
+```
 
-The index does not store orders, notes, photos, conversations, or other full CRM data.
+Model-facing PostgreSQL credential:
 
-Search reads use the `mcp_read` n8n credential, which maps to PostgreSQL role `mcp_readonly`.
+```text
+credential: mcp_read
+role:       mcp_readonly
+```
 
-Verified permissions after M3 setup:
+Verified business-read boundary:
 
 ```text
 SELECT = true
@@ -52,198 +60,88 @@ UPDATE = false
 DELETE = false
 ```
 
-An initial acceptance failure exposed that `mcp_readonly` did not yet have `SELECT` on the newly created `keycrm_customers` table. The query failed with `permission denied for table keycrm_customers`. The defect was fixed by granting only `SELECT`; write permissions remain denied.
-
-## Bootstrap
-
-Workflow:
-
-```text
-ADMIN — KeyCRM Customer Index Sync
-workflow_id: KP1EPFbemTrxbkcY
-```
-
-The bootstrap avoids unstable page-number scanning. It:
-
-```text
-Get latest buyer
- -> build buyer_id ranges of 50
- -> Loop Over Items
- -> GET /buyer?filter[buyer_id]=...
- -> normalize
- -> UPSERT local index
- -> wait 4 seconds
- -> next range
-```
-
-The first full bootstrap execution completed successfully:
-
-```text
-execution_id: 16711
-status:       success
-rows:         24118
-unique IDs:   24118
-duplicates:   0
-```
-
-## Incremental synchronization
-
-Workflow:
+Permanent customer synchronization:
 
 ```text
 ADMIN — KeyCRM Customer Index Incremental Sync
 workflow_id: KCIuipW0TTnCMxkY
-version_id: 9d8018ad-dc25-4747-8ca5-26eeb320a9b3
-status: active
+schedule: every 15 minutes
 ```
 
-Schedule:
+Accepted model-facing tools:
 
 ```text
-every 15 minutes
+search_customers
+get_customer_details
 ```
 
-KeyCRM's allowed `updated_between` filter was verified against the real account. The accepted format is a comma-separated RFC3339 range:
+`search_customers` supports natural customer lookup by full/partial name, email, phone, and buyer ID through the minimal local index.
 
-```text
-filter[updated_between]=<from>,<to>
-```
-
-A real probe returned 57 changed buyers across two pages:
-
-```text
-page 1: 50
-page 2: 7
-```
-
-The production workflow uses:
-
-- `limit=50`
-- HTTP Request pagination on `page`
-- `4000 ms` between pages
-- a two-minute overlap before the previous checkpoint to avoid boundary misses
-- deduplication by `buyer_id` before UPSERT
-- one PostgreSQL statement that applies changes and advances the checkpoint only after the data write succeeds
-
-Checkpoint table:
-
-```text
-public.keycrm_sync_state
-```
-
-Automatic trigger acceptance passed:
-
-```text
-execution_id: 16742
-mode:         trigger
-status:       success
-changed:      11
-```
-
-During acceptance, the local index advanced from the bootstrap state to 24170 unique customers as new/updated KeyCRM records were synchronized.
-
-## `search_customers`
-
-Workflow:
-
-```text
-MCP — KeyCRM Customer Search
-workflow_id: yej0SNKc4Ovb4rzq
-version_id: 312b70c0-9f47-4b17-ac9e-5b61e88ebd2f
-status: active
-```
-
-Inputs:
-
-```json
-{
-  "query": "string",
-  "limit": 10
-}
-```
-
-`query` supports:
-
-- exact or partial customer name
-- email
-- phone
-- `buyer_id`
-
-`limit` defaults to 10 and must be an integer from 1 to 50.
-
-Search is executed against `public.keycrm_customers` with the read-only PostgreSQL credential. Name matching uses exact/prefix/substring ranking plus `pg_trgm` similarity. Email and phone matching are normalized inside SQL.
-
-The audit start stores the customer query as `[REDACTED]` because it may contain PII.
-
-Accepted production workflow call:
-
-```text
-status: succeeded
-duration_ms: 363
-```
-
-Invalid input is rejected before audit/provider access.
-
-## `get_customer_details`
-
-Workflow:
-
-```text
-MCP — KeyCRM Customer Details
-workflow_id: KcrmDetA9V7cQ2Lx
-version_id: 9cca4b55-80d3-4be4-b427-2a533eeaefbf
-status: active
-```
-
-Input:
-
-```json
-{
-  "buyer_id": 12345
-}
-```
-
-The workflow performs a fresh read from:
+`get_customer_details` performs a fresh provider read:
 
 ```text
 GET /buyer/{buyer_id}
 ```
 
-It returns current KeyCRM customer/contact data rather than relying on the local index for full details.
+Accepted errors include `INVALID_INPUT`, `NOT_FOUND`, and `UPSTREAM_ERROR` according to the shared normalized MCP contract.
 
-Acceptance:
+## Manager analytics acceptance
 
-- existing buyer -> `success=true`, `count=1`
-- nonexistent buyer -> `NOT_FOUND`
-- invalid `buyer_id` -> `INVALID_INPUT`
-- success audit finalized as `succeeded`
-- provider 404 audit finalized as `failed`, `error_code=NOT_FOUND`
-
-Observed audit examples:
+Accepted deployed tools:
 
 ```text
-succeeded duration_ms=331
-failed    error_code=NOT_FOUND
+get_manager_customer_stats
+get_manager_call_stats
+get_manager_sales_stats
+get_manager_lead_stats
+get_manager_assignment_history
+get_manager_call_timeline
 ```
 
-`Audit success` and `Audit failed` omit `arguments_json` entirely, matching the centralized audit contract.
-
-## MCP Server integration
-
-Aggregate workflow:
+Manager analytics uses synchronized KeyCRM pipeline/customer data and fresh KeyCRM call reads as documented in:
 
 ```text
-MCP — Server
-workflow_id: dSohghXnQp078EZm
+docs/M3_MANAGER_STATS_ACCEPTANCE.md
+docs/M3_MANAGER_ANALYTICS_ACCEPTANCE.md
 ```
 
-The current published tool surface contains 17 tools and includes all accepted M0-M3 read tools. The communications investigation made no MCP Server change, so no tool was added or removed during that work.
+The initial pipeline-card bootstrap discrepancy caused by shifting provider page boundaries was reconciled, including recovery of the 22 missing historical cards before analytics acceptance.
+
+Natural-language MCP-client acceptance for the manager analytics tools passed on 2026-09-09.
+
+## Assignment-history limitation
+
+KeyCRM OpenAPI does not expose the historical Action History used by the UI.
+
+Therefore `get_manager_assignment_history` intentionally uses observed snapshots beginning at:
+
+```text
+2026-09-09T18:37:30.384Z
+```
+
+The tool does not fabricate historical initiators or reconstruct unsupported history before that boundary.
+
+## Gmail regression fix included in final M3 context work
+
+`search_emails` remains a separate Gmail capability.
+
+A real final-context test exposed a zero-result defect where Gmail returned no MCP response. Production was fixed so zero matches now return:
+
+```json
+{
+  "success": true,
+  "data": [],
+  "meta": {
+    "count": 0
+  }
+}
+```
+
+The Gmail search query is redacted in audit start.
 
 ## CRM-native communications investigation
 
-The final customer-context demo exposed that a generic request for `communication/history with this customer` must not be implemented as `customer -> email -> Gmail` by default. KeyCRM itself contains multi-channel communication history in its UI.
-
-The supported-interface investigation was completed on 2026-09-09 against the current official KeyCRM OpenAPI documentation and the exact `api.yaml` loaded by that documentation.
+The project explicitly investigated whether communication history visible in the KeyCRM UI can be read through an official, stable public API.
 
 Result:
 
@@ -253,19 +151,9 @@ buyer communications include:              NOT AVAILABLE
 chat/message webhook event:                 NOT AVAILABLE
 ```
 
-The current public OpenAPI v1.2.0 contains no documented path for:
+The current official KeyCRM OpenAPI v1.2.0 contains no documented communications/chats/messages/conversations resource.
 
-```text
-communications
-chats
-messages
-conversations
-email history
-WhatsApp message history
-Instagram message history
-```
-
-The documented `GET /buyer/{buyerId}` associations are limited to:
+`GET /buyer/{buyerId}` documents only these includes:
 
 ```text
 manager
@@ -275,48 +163,54 @@ loyalty
 custom_fields
 ```
 
-The official outgoing webhook documentation currently lists only:
+The documented outgoing webhook surface exposes order/payment/lead-status events, not chat/message events.
 
-```text
-order.change_order_status
-order.change_payment_status
-lead.change_lead_status
-```
+No guessed `/messages` or `/chats` endpoint was used, and no private/internal KeyCRM UI endpoint or scraping path was introduced.
 
-No guessed `/messages` or `/chats` request was treated as an API probe because no such route is present in the official specification. No private/internal keyCRM UI endpoint was introduced.
-
-Detailed evidence is recorded in:
+Detailed evidence:
 
 ```text
 docs/M3_KEYCRM_COMMUNICATIONS_API.md
 ```
 
-## Communications acceptance decision
+## M3 closure decision
 
-`get_customer_communications` is not accepted for implementation against the current public API because there is no supported provider operation behind it.
+On 2026-09-10 the project explicitly accepted the absence of a supported KeyCRM communications API as a provider limitation and closed M3.
 
-Current correct behavior boundary:
+`get_customer_communications` is therefore **not an incomplete M3 implementation**. It is intentionally not implemented because the current supported provider interface cannot supply that data.
+
+The accepted production behavior is:
 
 ```text
 explicit Gmail/mailbox question
 -> search_emails
 -> Gmail
 
-customer communication/history in CRM
--> do not silently substitute Gmail
--> provider limitation must be stated until a supported KeyCRM interface exists
+CRM-native communication/history question
+-> current public KeyCRM API cannot supply it
+-> report provider limitation
 ```
 
-No production workflow was changed for this result. This preserves the existing security/read-only boundary and avoids an unsupported private-API dependency.
+The system must not silently substitute Gmail for KeyCRM-native history and must not use private/guessed provider interfaces without a separate future architecture/security decision.
 
-## Remaining M3 acceptance
+## Aggregate MCP acceptance
 
-Low-level production acceptance for customer synchronization, `search_customers`, `get_customer_details`, audit behavior, manager analytics, and the aggregate MCP Server is complete.
+Production aggregate workflow:
 
-The official CRM-native communications API investigation is also complete, with the result `unsupported by current public OpenAPI`.
+```text
+MCP — Server
+workflow_id: dSohghXnQp078EZm
+active_version_id: 3b70da4f-89b0-4bef-bcc1-dab23aa2d94a
+status: active
+```
 
-M3 is intentionally **not** marked complete yet. The remaining decision is how the project closes M3 under this provider limitation. Until that is explicitly resolved:
+Current published tool surface remains 17 tools. No tool was added or removed as part of the communications limitation/closure decision.
 
-- do not implement a private/UI communications workaround;
-- do not silently substitute Gmail for generic CRM communication history;
-- do not start M4 Controlled Writes.
+## Final M3 result
+
+```text
+M3 CRM integration: COMPLETE
+closure date:       2026-09-10
+```
+
+M4 Controlled Writes is now unblocked but remains not started.
