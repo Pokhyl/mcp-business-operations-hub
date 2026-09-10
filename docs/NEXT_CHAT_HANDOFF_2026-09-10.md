@@ -70,11 +70,13 @@ M0 Foundation                 complete
 M1 Production cleanup         complete
 M2 Google Workspace expansion complete
 M3 CRM integration            complete
-M4 Controlled writes          not started / unblocked
+M4 Controlled writes          deferred / not started
 M5 Portfolio hardening        not started
 ```
 
 M3 was explicitly closed on 2026-09-10.
+
+On 2026-09-10 the user also explicitly decided to stop KeyCRM work for now and leave M4/write integrations for later. Do not resume KeyCRM development, credential/scope changes, Gmail/Calendar writes, or CRM writes unless the user explicitly reopens that work.
 
 ## M3 closure boundary
 
@@ -160,11 +162,11 @@ Do not infer historical initiators or pre-tracking assignment history.
 - Do not remove existing MCP tools.
 - After any MCP Server edit, verify the complete tool surface.
 
-## Next milestone
+## Deferred M4 scope
 
-M4 Controlled Writes is now unblocked but has not started.
+M4 Controlled Writes is intentionally deferred and has not started.
 
-Planned M4 scope from the roadmap:
+Planned future scope remains:
 
 ```text
 separate write-tool class
@@ -175,7 +177,9 @@ create_calendar_event
 one safe CRM write operation
 ```
 
-Do not weaken existing read-only tools when introducing M4. Write tools must be separated by an explicit approval boundary and use idempotency where applicable.
+Do not start M4 automatically in a future chat. Resume it only after an explicit user instruction.
+
+When M4 is resumed, first verify the actual production OAuth scopes/credentials separately from API capability; do not assume that an API-supported write is already authorized by existing read-only credentials.
 
 After any production workflow change:
 
