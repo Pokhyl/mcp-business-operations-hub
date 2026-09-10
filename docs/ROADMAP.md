@@ -124,11 +124,15 @@ M4 remains planned for a later phase. Do not start credential/scope changes, Gma
 
 ## M5 — Portfolio hardening
 
-Status: not started.
+Status: in progress as of 2026-09-10.
 
-- [ ] Architecture diagram image
+- [x] Recruiter-facing architecture diagram using GitHub-rendered Mermaid (`docs/PORTFOLIO_ARCHITECTURE.md`)
 - [ ] Short demo video/GIF
-- [ ] Sanitized example executions
-- [ ] Automated workflow JSON validation
-- [ ] Deployment/runbook documentation
-- [ ] Final recruiter-facing README
+- [x] Sanitized example executions (`examples/README.md`)
+- [x] Automated workflow JSON validation (`scripts/validate_n8n_exports.py` + GitHub Actions)
+- [x] Deployment/runbook documentation (`docs/RUNBOOK.md`)
+- [x] Final recruiter-facing README
+
+The automated workflow export validation is active on push and pull request and passed its first run on the current repository exports.
+
+The remaining M5 deliverable is the short demo video/GIF. It must avoid exposing mailbox content, customer PII, credentials, or confidential production metrics.
