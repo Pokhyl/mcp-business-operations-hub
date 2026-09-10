@@ -111,7 +111,9 @@ Evidence:
 
 ## M4 — Controlled writes
 
-Status: not started; unblocked by M3 closure.
+Status: deferred by explicit user decision on 2026-09-10; not started.
+
+M4 remains planned for a later phase. Do not start credential/scope changes, Gmail/Calendar writes, or KeyCRM write operations until the user explicitly resumes M4.
 
 - [ ] Separate write-tool class
 - [ ] Explicit user approval requirement
