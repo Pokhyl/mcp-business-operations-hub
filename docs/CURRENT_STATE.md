@@ -58,11 +58,13 @@ M0 Foundation                 complete
 M1 Production cleanup         complete
 M2 Google Workspace expansion complete
 M3 CRM integration            complete
-M4 Controlled writes          not started / unblocked
+M4 Controlled writes          deferred / not started
 M5 Portfolio hardening        not started
 ```
 
 M3 was explicitly closed on 2026-09-10 with the current KeyCRM communications limitation accepted as a provider boundary.
+
+On 2026-09-10 the user explicitly decided to close KeyCRM work for now and leave M4/write integrations for later. Therefore no further KeyCRM development, OAuth/write-scope changes, Gmail/Calendar writes, or CRM write tools should be started unless the user explicitly resumes that scope.
 
 The accepted M3 scope includes deployed read-only CRM customer search/details, manager customer/call statistics, sales/lead analytics, observed reassignment history, and call timeline. The existing CRM tools passed low-level and natural-language acceptance where applicable.
 
@@ -300,6 +302,7 @@ n8n/gmail/SEARCH_EMAILS.json
 - Internal synchronization writes only to local PostgreSQL infrastructure tables.
 - Business-read tools use `mcp_readonly`.
 - No unsupported KeyCRM communications endpoint was introduced.
+- No M4 write credential/scope changes have been made.
 
 ## Repository evidence
 
@@ -322,19 +325,12 @@ n8n/gmail/SEARCH_EMAILS.json
 
 ## Exact next step
 
-M3 is complete.
+There is no active KeyCRM/M4 implementation step.
 
-The next milestone is M4 Controlled Writes. M4 is unblocked but has not been started by this closure-only change.
+M3 is complete and KeyCRM work is closed for now. M4 Controlled Writes remains planned but is explicitly deferred by the user.
 
-M4 must preserve the existing design requirements:
+Do not automatically start credential/scope changes, `send_email`, `create_calendar_event`, or a KeyCRM write operation in a future chat. Resume M4 only after an explicit user instruction.
 
-```text
-separate write-tool class
-explicit user approval
-idempotency
-send_email
-create_calendar_event
-one safe CRM write operation
-```
+When M4 is resumed, first verify the actual production OAuth scopes/credentials separately from API capability. Existing read-only credentials must not be silently broadened.
 
-If KeyCRM later publishes an official stable customer-communications read API, that capability can be added as a separate future enhancement without reopening the validity of the M3 closure decision unless the project explicitly chooses to do so.
+If KeyCRM later publishes an official stable customer-communications read API, that capability can be considered as a separate future enhancement without invalidating the completed M3 milestone.
