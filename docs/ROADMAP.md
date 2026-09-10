@@ -40,7 +40,9 @@ Detailed M2 evidence is recorded in the Calendar, Drive, and acceptance document
 
 ## M3 — CRM integration
 
-Status: in progress; CRM search/details and manager analytics are deployed and client-accepted. Official CRM-native communication-history access was investigated on 2026-09-09 and is not exposed by the current public keyCRM OpenAPI. M3 remains open; no unsupported/private communications implementation is allowed.
+Status: complete as of 2026-09-10.
+
+M3 was closed with the current KeyCRM CRM-native communications limitation explicitly accepted as a provider boundary. The current public KeyCRM OpenAPI v1.2.0 does not expose a supported communications/chat/message read resource, buyer communications include, or documented chat/message webhook event. No private/UI workaround is part of M3.
 
 - [x] Select KeyCRM and define the read-only boundary
 - [x] Create local PostgreSQL customer search index
@@ -67,15 +69,14 @@ Status: in progress; CRM search/details and manager analytics are deployed and c
 - [x] `get_manager_call_timeline(manager, start, end)`
 - [x] Expose all current CRM read tools through the aggregate `MCP — Server`
 - [x] Verify the full M0-M3 tool surface after the latest gateway edit
-- [x] Low-level production acceptance for all four manager analytics tools
-- [x] Natural-language MCP-client acceptance for the four newest manager analytics tools
+- [x] Low-level production acceptance for manager analytics tools
+- [x] Natural-language MCP-client acceptance for manager analytics tools
 - [x] Fix `search_emails` zero-result behavior and redact Gmail search audit query
-- [x] Verify official/stable KeyCRM read access to customer communications stored in CRM — result: unsupported by current public OpenAPI v1.2.0
-- [x] Verify documented keyCRM webhook surface for a supported message-event fallback — result: only order/payment/lead-status events; no chat/message event
-- [ ] `get_customer_communications` — blocked: no official/stable provider read endpoint; do not implement against guessed/private UI APIs
-- [ ] Natural-language acceptance for CRM-native customer communication history — blocked by provider API boundary
-- [ ] Final customer-context behavior/demo — must not silently substitute Gmail for generic CRM communication history
-- [ ] M3 closure
+- [x] Investigate official/stable KeyCRM customer communications access — unsupported by current public OpenAPI v1.2.0
+- [x] Investigate documented KeyCRM webhook message-event fallback — no supported chat/message event
+- [x] Accept `get_customer_communications` as not implementable through the current supported provider API; do not use guessed/private UI APIs
+- [x] Define final customer-context behavior: generic CRM communication-history requests report the provider limitation and do not silently substitute Gmail
+- [x] Close M3 with the provider limitation documented and accepted
 
 Current production CRM gateway includes:
 
@@ -90,7 +91,7 @@ get_manager_assignment_history
 get_manager_call_timeline
 ```
 
-Important architecture rule for the remaining M3 work:
+Architecture boundary retained after M3 closure:
 
 ```text
 "show communication/history with this customer"
@@ -101,29 +102,27 @@ Important architecture rule for the remaining M3 work:
 
 `search_emails` remains a separate Gmail capability for explicit Gmail/mailbox questions.
 
-Communications API evidence:
-
-- `docs/M3_KEYCRM_COMMUNICATIONS_API.md`
-
-Other detailed evidence:
+Evidence:
 
 - `docs/M3_KEYCRM_ACCEPTANCE.md`
 - `docs/M3_MANAGER_STATS_ACCEPTANCE.md`
 - `docs/M3_MANAGER_ANALYTICS_ACCEPTANCE.md`
-- `docs/NEXT_CHAT_HANDOFF_2026-09-09.md`
+- `docs/M3_KEYCRM_COMMUNICATIONS_API.md`
 
 ## M4 — Controlled writes
 
-Do not start until M3 is explicitly closed.
+Status: not started; unblocked by M3 closure.
 
 - [ ] Separate write-tool class
 - [ ] Explicit user approval requirement
 - [ ] Idempotency for mutations
 - [ ] `send_email`
 - [ ] `create_calendar_event`
-- [ ] one CRM write operation
+- [ ] one safe CRM write operation
 
 ## M5 — Portfolio hardening
+
+Status: not started.
 
 - [ ] Architecture diagram image
 - [ ] Short demo video/GIF
