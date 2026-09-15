@@ -1,0 +1,48 @@
+name: Recovery sync MCP exports
+
+on:
+  push:
+    branches:
+      - recovery-sync-20260915
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build exact final commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXPECTED_BASE="e6b79e71113e48f7aed461d6d2b197d7793b006c"
+          EXPECTED_PATCH_SHA256="01021b80de22e5872acb5319aada7f9cd667d4b30ee9972e50f82bcbfd0242cc"
+
+          git fetch origin main
+          ACTUAL_BASE="$(git rev-parse origin/main)"
+          test "$ACTUAL_BASE" = "$EXPECTED_BASE"
+
+          cat .recovery/mcp-main-to-final.patch.b64.part* | base64 -d > /tmp/mcp-main-to-final.patch.xz
+          echo "$EXPECTED_PATCH_SHA256  /tmp/mcp-main-to-final.patch.xz" | sha256sum -c -
+          xz -dc /tmp/mcp-main-to-final.patch.xz > /tmp/mcp-main-to-final.patch
+
+          git checkout --detach "$EXPECTED_BASE"
+          git apply --check /tmp/mcp-main-to-final.patch
+          git apply /tmp/mcp-main-to-final.patch
+          python scripts/validate_n8n_exports.py
+
+          git add -A
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          TREE="$(git write-tree)"
+          FINAL="$(printf '%s\n' 'chore: sync complete production MCP workflow exports' | git commit-tree "$TREE" -p "$EXPECTED_BASE")"
+          echo "FINAL_SHA=$FINAL" >> "$GITHUB_ENV"
+          git push origin "$FINAL:refs/heads/recovery-final-20260915" --force
+
+      - name: Show final SHA
+        run: echo "$FINAL_SHA"
