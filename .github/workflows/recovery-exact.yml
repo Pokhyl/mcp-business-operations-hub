@@ -1,0 +1,39 @@
+name: Recovery exact MCP sync
+on:
+  push:
+    branches: [recovery-exact-20260915]
+permissions:
+  contents: write
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Build exact verified commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXPECTED_BASE="e6b79e71113e48f7aed461d6d2b197d7793b006c"
+          EXPECTED_PATCH_SHA256="90ac9d10831f1ffb5f9c15f502172a9c2af9314592aba0232f7ed79b7dc7b75b"
+          EXPECTED_TREE="28a4b7bbe5e358cd4d322ff65d51eb3c330a578b"
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = "$EXPECTED_BASE"
+          cat .recovery/part01 .recovery/part02 .recovery/part03 .recovery/part04 .recovery/part05_08 > /tmp/mcp.patch.b64
+          base64 -d /tmp/mcp.patch.b64 > /tmp/mcp.patch.xz
+          echo "$EXPECTED_PATCH_SHA256  /tmp/mcp.patch.xz" | sha256sum -c -
+          xz -dc /tmp/mcp.patch.xz > /tmp/mcp.patch
+          git checkout --detach "$EXPECTED_BASE"
+          git apply --check /tmp/mcp.patch
+          git apply /tmp/mcp.patch
+          python scripts/validate_n8n_exports.py
+          git add -A
+          TREE="$(git write-tree)"
+          echo "TREE=$TREE"
+          test "$TREE" = "$EXPECTED_TREE"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          FINAL="$(printf '%s\n' 'chore: sync complete production MCP workflow exports' | git commit-tree "$TREE" -p "$EXPECTED_BASE")"
+          echo "FINAL=$FINAL"
+          git push origin "$FINAL:refs/heads/recovery-final-exact-20260915" --force
