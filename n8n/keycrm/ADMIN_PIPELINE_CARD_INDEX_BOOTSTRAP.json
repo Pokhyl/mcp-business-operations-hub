@@ -1,0 +1,629 @@
+{
+  "updatedAt": "2026-09-13T19:45:12.984Z",
+  "createdAt": "2026-09-13T19:45:12.984Z",
+  "id": "KcrmPipelineBootstrapA1",
+  "name": "ADMIN — KeyCRM Pipeline Card Index Bootstrap",
+  "description": null,
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -900,
+        0
+      ],
+      "id": "e85440a4-90d9-49df-aed0-66e6ddfa6789",
+      "name": "Manual Trigger"
+    },
+    {
+      "parameters": {
+        "url": "https://openapi.keycrm.app/v1/pipelines/cards",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "limit",
+              "value": "50"
+            },
+            {
+              "name": "page",
+              "value": "1"
+            },
+            {
+              "name": "include",
+              "value": "status"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -680,
+        0
+      ],
+      "id": "6032ce72-b45c-4533-b8e9-d54f83508f6d",
+      "name": "Fetch first card page",
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "TGZJjiNcly8kxlkS",
+          "name": "KeyCRM MCP"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = items[0]?.json ?? {};\nconst lastPage = Number(response.last_page);\nconst total = Number(response.total ?? 0);\nif (!Number.isInteger(lastPage) || lastPage < 1) {\n  throw new Error('Could not determine KeyCRM pipeline-card last_page');\n}\nreturn Array.from({ length: lastPage }, (_, i) => ({\n  json: { page: i + 1, last_page: lastPage, total }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -460,
+        0
+      ],
+      "id": "8b9721c2-d75e-477a-a183-a80082cc462f",
+      "name": "Build card pages"
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -240,
+        0
+      ],
+      "id": "b14bde1b-8260-4424-88ad-0aa65397b0d9",
+      "name": "Process card pages"
+    },
+    {
+      "parameters": {
+        "url": "https://openapi.keycrm.app/v1/pipelines/cards",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "limit",
+              "value": "50"
+            },
+            {
+              "name": "page",
+              "value": "={{ $json.page }}"
+            },
+            {
+              "name": "include",
+              "value": "status"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        0,
+        120
+      ],
+      "id": "31a2e653-98f6-4df5-ba84-861e3ffad493",
+      "name": "Fetch cards page",
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "TGZJjiNcly8kxlkS",
+          "name": "KeyCRM MCP"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "648169f7-f007-48b1-8e5c-8af0a6f6f7b6",
+              "leftValue": "={{ Array.isArray($json.data) && $json.data.length > 0 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        220,
+        120
+      ],
+      "id": "035d9b3b-14c4-4326-ab91-1172a8e84aa5",
+      "name": "Has cards?"
+    },
+    {
+      "parameters": {
+        "jsCode": "const syncedAt = new Date().toISOString();\nconst out = [];\nfor (const item of items) {\n  const cards = Array.isArray(item.json?.data) ? item.json.data : [];\n  for (const card of cards) {\n    const cardId = Number(card.id);\n    const pipelineId = Number(card.pipeline_id);\n    if (!Number.isInteger(cardId) || cardId < 1 || !Number.isInteger(pipelineId) || pipelineId < 1) continue;\n    out.push({ json: {\n      card_id: cardId,\n      pipeline_id: pipelineId,\n      source_id: Number.isInteger(Number(card.source_id)) ? Number(card.source_id) : null,\n      manager_id: Number.isInteger(Number(card.manager_id)) ? Number(card.manager_id) : null,\n      status_id: Number.isInteger(Number(card.status_id)) ? Number(card.status_id) : null,\n      status_alias: typeof card.status?.alias === 'string' ? card.status.alias : null,\n      status_title: typeof card.status?.title === 'string' ? card.status.title : null,\n      status_is_final: typeof card.status?.is_final === 'boolean' ? card.status.is_final : null,\n      is_finished: typeof card.is_finished === 'boolean' ? card.is_finished : null,\n      closed_from: Number.isInteger(Number(card.closed_from)) ? Number(card.closed_from) : null,\n      created_at: card.created_at || null,\n      updated_at: card.updated_at || null,\n      status_changed_at: card.status_changed_at || null,\n      payments_total: Number.isFinite(Number(card.payments_total)) ? Number(card.payments_total) : 0,\n      products_total: Number.isFinite(Number(card.products_total)) ? Number(card.products_total) : 0,\n      utm_source: typeof card.utm_source === 'string' ? card.utm_source : null,\n      utm_medium: typeof card.utm_medium === 'string' ? card.utm_medium : null,\n      utm_campaign: typeof card.utm_campaign === 'string' ? card.utm_campaign : null,\n      synced_at: syncedAt\n    }});\n  }\n}\nreturn out;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        40
+      ],
+      "id": "c23dc1f6-8344-4f1c-9504-582a8ea0037f",
+      "name": "Normalize cards"
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "keycrm_pipeline_cards",
+          "mode": "list",
+          "cachedResultName": "keycrm_pipeline_cards"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {
+            "card_id": 0
+          },
+          "matchingColumns": [
+            "card_id"
+          ],
+          "schema": [
+            {
+              "id": "card_id",
+              "displayName": "card_id",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "pipeline_id",
+              "displayName": "pipeline_id",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "source_id",
+              "displayName": "source_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "manager_id",
+              "displayName": "manager_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "status_id",
+              "displayName": "status_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "status_alias",
+              "displayName": "status_alias",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "status_title",
+              "displayName": "status_title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "status_is_final",
+              "displayName": "status_is_final",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "is_finished",
+              "displayName": "is_finished",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "closed_from",
+              "displayName": "closed_from",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "updated_at",
+              "displayName": "updated_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "status_changed_at",
+              "displayName": "status_changed_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "payments_total",
+              "displayName": "payments_total",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "products_total",
+              "displayName": "products_total",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "utm_source",
+              "displayName": "utm_source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "utm_medium",
+              "displayName": "utm_medium",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "utm_campaign",
+              "displayName": "utm_campaign",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "synced_at",
+              "displayName": "synced_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "queryBatching": "transaction"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        660,
+        40
+      ],
+      "id": "c0280165-50cb-4e06-887d-7ea5fe59c849",
+      "name": "Upsert pipeline card index",
+      "credentials": {
+        "postgres": {
+          "id": "AdVJ2zREIvjZqGH5",
+          "name": "Application PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "amount": 4,
+        "unit": "seconds"
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        120
+      ],
+      "id": "1477f282-b8f9-4b36-bb24-b83deddcfb07",
+      "name": "Wait 4 seconds"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH meta AS (\n  INSERT INTO public.keycrm_pipeline_tracking_meta(id,tracking_started_at)\n  VALUES(1,now())\n  ON CONFLICT(id) DO UPDATE SET tracking_started_at=EXCLUDED.tracking_started_at\n  RETURNING tracking_started_at\n), state AS (\n  INSERT INTO public.keycrm_sync_state(sync_name,last_successful_sync_at,last_count,updated_at)\n  VALUES('pipeline_cards_incremental',$1::timestamptz,0,now())\n  ON CONFLICT(sync_name) DO UPDATE SET last_successful_sync_at=EXCLUDED.last_successful_sync_at,last_count=0,updated_at=now()\n  RETURNING last_successful_sync_at\n)\nSELECT (SELECT tracking_started_at FROM meta) AS tracking_started_at,(SELECT last_successful_sync_at FROM state) AS incremental_checkpoint,(SELECT count(*)::int FROM public.keycrm_pipeline_cards) AS indexed_cards;",
+        "options": {
+          "queryReplacement": "={{ [ $('Capture bootstrap start').first().json.bootstrap_started_at ] }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        0,
+        -160
+      ],
+      "id": "4baf3605-d774-44e7-a70b-9d6191706a57",
+      "name": "Finalize pipeline bootstrap",
+      "credentials": {
+        "postgres": {
+          "id": "AdVJ2zREIvjZqGH5",
+          "name": "Application PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json:{bootstrap_started_at:new Date().toISOString()}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -720,
+        0
+      ],
+      "id": "4b512c30-c7b3-46e2-ad8c-ecc79763ca71",
+      "name": "Capture bootstrap start"
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Capture bootstrap start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch first card page": {
+      "main": [
+        [
+          {
+            "node": "Build card pages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build card pages": {
+      "main": [
+        [
+          {
+            "node": "Process card pages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process card pages": {
+      "main": [
+        [
+          {
+            "node": "Finalize pipeline bootstrap",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fetch cards page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch cards page": {
+      "main": [
+        [
+          {
+            "node": "Has cards?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has cards?": {
+      "main": [
+        [
+          {
+            "node": "Normalize cards",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait 4 seconds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize cards": {
+      "main": [
+        [
+          {
+            "node": "Upsert pipeline card index",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert pipeline card index": {
+      "main": [
+        [
+          {
+            "node": "Wait 4 seconds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 4 seconds": {
+      "main": [
+        [
+          {
+            "node": "Process card pages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Capture bootstrap start": {
+      "main": [
+        [
+          {
+            "node": "Fetch first card page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Warsaw"
+  },
+  "staticData": null,
+  "meta": null,
+  "nodeGroups": [],
+  "pinData": null,
+  "versionId": "4c0c4f6f-6251-4895-af68-e81f14c98aef",
+  "activeVersionId": null,
+  "versionCounter": 1,
+  "triggerCount": 0,
+  "sourceWorkflowId": null,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-09-13T19:45:12.984Z",
+      "createdAt": "2026-09-13T19:45:12.984Z",
+      "role": "workflow:owner",
+      "workflowId": "KcrmPipelineBootstrapA1",
+      "projectId": "WPiLi1dhTYs2ov71",
+      "project": {
+        "updatedAt": "2026-09-13T19:09:09.493Z",
+        "createdAt": "2026-09-11T20:16:40.332Z",
+        "id": "WPiLi1dhTYs2ov71",
+        "name": "Vitalii Pokhyl <pokhylvitalii@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "4a00a311-544e-4270-a735-25e36206388c"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": null,
+    "description": null
+  }
+}

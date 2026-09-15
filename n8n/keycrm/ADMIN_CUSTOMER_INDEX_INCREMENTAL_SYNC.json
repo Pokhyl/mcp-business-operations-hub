@@ -11,43 +11,249 @@
       "parameters": {},
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
-      "position": [-720,-80],
+      "position": [
+        -720,
+        -80
+      ],
       "id": "306253a6-82fd-40f4-add9-40beb8713271",
       "name": "Manual Trigger"
     },
     {
-      "parameters": {"rule":{"interval":[{"field":"minutes","minutesInterval":15}]}},
-      "type":"n8n-nodes-base.scheduleTrigger",
-      "typeVersion":1.4,
-      "position":[-720,80],
-      "id":"9a5fbf59-9def-4e6e-9d75-5337d7c12eac",
-      "name":"Schedule every 15 minutes"
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        -720,
+        80
+      ],
+      "id": "9a5fbf59-9def-4e6e-9d75-5337d7c12eac",
+      "name": "Schedule every 15 minutes"
     },
     {
-      "parameters":{"operation":"executeQuery","query":"WITH state AS (\n  SELECT last_successful_sync_at\n  FROM public.keycrm_sync_state\n  WHERE sync_name = 'buyers_incremental'\n)\nSELECT\n  COALESCE((SELECT last_successful_sync_at FROM state), now() - interval '1 hour') - interval '2 minutes' AS from_ts,\n  now() AS to_ts;","options":{}},
-      "type":"n8n-nodes-base.postgres","typeVersion":2.7,"position":[-464,0],"id":"94f7ad8f-1936-43a8-99ad-33c6f6c18af2","name":"Load sync window","credentials":{"postgres":{"id":"AdVJ2zREIvjZqGH5","name":"Application PostgreSQL"}}
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH state AS (\n  SELECT last_successful_sync_at\n  FROM public.keycrm_sync_state\n  WHERE sync_name = 'buyers_incremental'\n)\nSELECT\n  COALESCE((SELECT last_successful_sync_at FROM state), now() - interval '1 hour') - interval '2 minutes' AS from_ts,\n  now() AS to_ts;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        -464,
+        0
+      ],
+      "id": "94f7ad8f-1936-43a8-99ad-33c6f6c18af2",
+      "name": "Load sync window",
+      "credentials": {
+        "postgres": {
+          "id": "AdVJ2zREIvjZqGH5",
+          "name": "Application PostgreSQL"
+        }
+      }
     },
     {
-      "parameters":{"url":"https://openapi.keycrm.app/v1/buyer","authentication":"genericCredentialType","genericAuthType":"httpBearerAuth","sendQuery":true,"queryParameters":{"parameters":[{"name":"limit","value":"50"},{"name":"filter[updated_between]","value":"={{ new Date($('Load sync window').first().json.from_ts).toISOString() + ',' + new Date($('Load sync window').first().json.to_ts).toISOString() }}"}]},"sendHeaders":true,"headerParameters":{"parameters":[{"name":"Accept","value":"application/json"}]},"options":{"pagination":{"pagination":{"paginationMode":"updateAParameterInEachRequest","parameters":{"parameters":[{"type":"qs","name":"page","value":"={{ $pageCount + 1 }}"}]},"paginationCompleteWhen":"other","completeExpression":"={{ $response.body.current_page >= $response.body.last_page }}","requestInterval":4000}}}},
-      "type":"n8n-nodes-base.httpRequest","typeVersion":4.5,"position":[-208,0],"id":"a9ab098a-fa4f-4bf0-aa1c-7bbf3addc7ea","name":"Fetch changed buyers","credentials":{"httpBearerAuth":{"id":"TGZJjiNcly8kxlkS","name":"KeyCRM MCP"}},"retryOnFail":true,"maxTries":3,"waitBetweenTries":5000
+      "parameters": {
+        "url": "https://openapi.keycrm.app/v1/buyer",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "limit",
+              "value": "50"
+            },
+            {
+              "name": "filter[updated_between]",
+              "value": "={{ new Date($('Load sync window').first().json.from_ts).toISOString() + ',' + new Date($('Load sync window').first().json.to_ts).toISOString() }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "pagination": {
+            "pagination": {
+              "paginationMode": "updateAParameterInEachRequest",
+              "parameters": {
+                "parameters": [
+                  {
+                    "type": "qs",
+                    "name": "page",
+                    "value": "={{ $pageCount + 1 }}"
+                  }
+                ]
+              },
+              "paginationCompleteWhen": "other",
+              "completeExpression": "={{ $response.body.current_page >= $response.body.last_page }}",
+              "requestInterval": 4000
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -208,
+        0
+      ],
+      "id": "a9ab098a-fa4f-4bf0-aa1c-7bbf3addc7ea",
+      "name": "Fetch changed buyers",
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "TGZJjiNcly8kxlkS",
+          "name": "KeyCRM MCP"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
     },
     {
-      "parameters":{"jsCode":"const window = $('Load sync window').first().json;\nconst customers = new Map();\n\nfor (const item of items) {\n  const buyers = Array.isArray(item.json?.data) ? item.json.data : [];\n  for (const buyer of buyers) {\n    const buyerId = Number(buyer.id);\n    if (!Number.isInteger(buyerId) || buyerId < 1) continue;\n    customers.set(buyerId, {\n      buyer_id: buyerId,\n      full_name: typeof buyer.full_name === 'string' ? buyer.full_name.trim() : '',\n      phones: Array.isArray(buyer.phone) ? buyer.phone.filter(v => typeof v === 'string').map(v => v.trim()).filter(Boolean) : [],\n      emails: Array.isArray(buyer.email) ? buyer.email.filter(v => typeof v === 'string').map(v => v.trim().toLowerCase()).filter(Boolean) : [],\n      keycrm_updated_at: buyer.updated_at || null\n    });\n  }\n}\n\nreturn [{json:{from_ts:window.from_ts,to_ts:window.to_ts,count:customers.size,buyers:[...customers.values()]}}];"},
-      "type":"n8n-nodes-base.code","typeVersion":2,"position":[48,0],"id":"f588fabd-c637-496b-90d9-b08ec16cbf48","name":"Build incremental payload"
+      "parameters": {
+        "jsCode": "const window = $('Load sync window').first().json;\nconst customers = new Map();\n\nfor (const item of items) {\n  const buyers = Array.isArray(item.json?.data)\n    ? item.json.data\n    : [];\n\n  for (const buyer of buyers) {\n    const buyerId = Number(buyer.id);\n\n    if (!Number.isInteger(buyerId) || buyerId < 1) {\n      continue;\n    }\n\n    customers.set(buyerId, {\n      buyer_id: buyerId,\n      full_name:\n        typeof buyer.full_name === 'string'\n          ? buyer.full_name.trim()\n          : '',\n      phones:\n        Array.isArray(buyer.phone)\n          ? buyer.phone\n              .filter((value) => typeof value === 'string')\n              .map((value) => value.trim())\n              .filter(Boolean)\n          : [],\n      emails:\n        Array.isArray(buyer.email)\n          ? buyer.email\n              .filter((value) => typeof value === 'string')\n              .map((value) => value.trim().toLowerCase())\n              .filter(Boolean)\n          : [],\n      keycrm_updated_at: buyer.updated_at || null\n    });\n  }\n}\n\nreturn [\n  {\n    json: {\n      from_ts: window.from_ts,\n      to_ts: window.to_ts,\n      count: customers.size,\n      buyers: [...customers.values()]\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        48,
+        0
+      ],
+      "id": "f588fabd-c637-496b-90d9-b08ec16cbf48",
+      "name": "Build incremental payload"
     },
     {
-      "parameters":{"operation":"executeQuery","query":"WITH input AS (\n    SELECT $1::jsonb AS buyers, $2::timestamptz AS checkpoint\n), source_rows AS (\n    SELECT (buyer->>'buyer_id')::bigint AS buyer_id, COALESCE(buyer->>'full_name','') AS full_name,\n           ARRAY(SELECT jsonb_array_elements_text(COALESCE(buyer->'phones','[]'::jsonb)))::text[] AS phones,\n           ARRAY(SELECT jsonb_array_elements_text(COALESCE(buyer->'emails','[]'::jsonb)))::text[] AS emails,\n           NULLIF(buyer->>'keycrm_updated_at','')::timestamptz AS keycrm_updated_at, input.checkpoint AS synced_at\n    FROM input CROSS JOIN LATERAL jsonb_array_elements(input.buyers) AS buyer\n), upserted AS (\n    INSERT INTO public.keycrm_customers (buyer_id,full_name,phones,emails,keycrm_updated_at,synced_at)\n    SELECT buyer_id,full_name,phones,emails,keycrm_updated_at,synced_at FROM source_rows\n    ON CONFLICT (buyer_id) DO UPDATE SET full_name=EXCLUDED.full_name, phones=EXCLUDED.phones, emails=EXCLUDED.emails, keycrm_updated_at=EXCLUDED.keycrm_updated_at, synced_at=EXCLUDED.synced_at\n    RETURNING buyer_id\n), state_update AS (\n    INSERT INTO public.keycrm_sync_state (sync_name,last_successful_sync_at,last_count,updated_at)\n    SELECT 'buyers_incremental', input.checkpoint, (SELECT count(*)::int FROM upserted), now() FROM input\n    ON CONFLICT (sync_name) DO UPDATE SET last_successful_sync_at=EXCLUDED.last_successful_sync_at,last_count=EXCLUDED.last_count,updated_at=EXCLUDED.updated_at\n    RETURNING last_successful_sync_at,last_count,updated_at\n) SELECT last_successful_sync_at,last_count,updated_at FROM state_update;","options":{"queryReplacement":"={{ [ JSON.stringify($json.buyers), $json.to_ts ] }}"}},
-      "type":"n8n-nodes-base.postgres","typeVersion":2.7,"position":[304,0],"id":"2424ed11-7e27-4ad9-bc16-ade9c4254476","name":"Apply changes and checkpoint","credentials":{"postgres":{"id":"AdVJ2zREIvjZqGH5","name":"Application PostgreSQL"}}
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH input AS (\n    SELECT\n        $1::jsonb AS buyers,\n        $2::timestamptz AS checkpoint\n),\nsource_rows AS (\n    SELECT\n        (buyer->>'buyer_id')::bigint AS buyer_id,\n        COALESCE(buyer->>'full_name', '') AS full_name,\n        ARRAY(\n            SELECT jsonb_array_elements_text(\n                COALESCE(buyer->'phones', '[]'::jsonb)\n            )\n        )::text[] AS phones,\n        ARRAY(\n            SELECT jsonb_array_elements_text(\n                COALESCE(buyer->'emails', '[]'::jsonb)\n            )\n        )::text[] AS emails,\n        NULLIF(buyer->>'keycrm_updated_at', '')::timestamptz AS keycrm_updated_at,\n        input.checkpoint AS synced_at\n    FROM input\n    CROSS JOIN LATERAL jsonb_array_elements(input.buyers) AS buyer\n),\nupserted AS (\n    INSERT INTO public.keycrm_customers (\n        buyer_id,\n        full_name,\n        phones,\n        emails,\n        keycrm_updated_at,\n        synced_at\n    )\n    SELECT\n        buyer_id,\n        full_name,\n        phones,\n        emails,\n        keycrm_updated_at,\n        synced_at\n    FROM source_rows\n    ON CONFLICT (buyer_id) DO UPDATE SET\n        full_name = EXCLUDED.full_name,\n        phones = EXCLUDED.phones,\n        emails = EXCLUDED.emails,\n        keycrm_updated_at = EXCLUDED.keycrm_updated_at,\n        synced_at = EXCLUDED.synced_at\n    RETURNING buyer_id\n),\nstate_update AS (\n    INSERT INTO public.keycrm_sync_state (\n        sync_name,\n        last_successful_sync_at,\n        last_count,\n        updated_at\n    )\n    SELECT\n        'buyers_incremental',\n        input.checkpoint,\n        (SELECT count(*)::int FROM upserted),\n        now()\n    FROM input\n    ON CONFLICT (sync_name) DO UPDATE SET\n        last_successful_sync_at = EXCLUDED.last_successful_sync_at,\n        last_count = EXCLUDED.last_count,\n        updated_at = EXCLUDED.updated_at\n    RETURNING last_successful_sync_at, last_count, updated_at\n)\nSELECT\n    last_successful_sync_at,\n    last_count,\n    updated_at\nFROM state_update;",
+        "options": {
+          "queryReplacement": "={{ [ JSON.stringify($json.buyers), $json.to_ts ] }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        304,
+        0
+      ],
+      "id": "2424ed11-7e27-4ad9-bc16-ade9c4254476",
+      "name": "Apply changes and checkpoint",
+      "credentials": {
+        "postgres": {
+          "id": "AdVJ2zREIvjZqGH5",
+          "name": "Application PostgreSQL"
+        }
+      }
     }
   ],
-  "connections":{
-    "Manual Trigger":{"main":[[{"node":"Load sync window","type":"main","index":0}]]},
-    "Schedule every 15 minutes":{"main":[[{"node":"Load sync window","type":"main","index":0}]]},
-    "Load sync window":{"main":[[{"node":"Fetch changed buyers","type":"main","index":0}]]},
-    "Fetch changed buyers":{"main":[[{"node":"Build incremental payload","type":"main","index":0}]]},
-    "Build incremental payload":{"main":[[{"node":"Apply changes and checkpoint","type":"main","index":0}]]}
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Load sync window",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule every 15 minutes": {
+      "main": [
+        [
+          {
+            "node": "Load sync window",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load sync window": {
+      "main": [
+        [
+          {
+            "node": "Fetch changed buyers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch changed buyers": {
+      "main": [
+        [
+          {
+            "node": "Build incremental payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build incremental payload": {
+      "main": [
+        [
+          {
+            "node": "Apply changes and checkpoint",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "settings":{"executionOrder":"v1","timezone":"Europe/Warsaw"},
-  "staticData":null,"meta":null,"nodeGroups":[],"pinData":null,
-  "versionId":"aca2f392-b53f-4799-8adb-a3ae82f4e88e","activeVersionId":null,"versionCounter":1,"triggerCount":0,"sourceWorkflowId":null,"tags":[],"shared":[],"versionMetadata":{"name":null,"description":null}
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Warsaw"
+  },
+  "staticData": null,
+  "meta": null,
+  "nodeGroups": [],
+  "pinData": null,
+  "versionId": "aca2f392-b53f-4799-8adb-a3ae82f4e88e",
+  "activeVersionId": null,
+  "versionCounter": 1,
+  "triggerCount": 0,
+  "sourceWorkflowId": null,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-09-13T19:44:13.058Z",
+      "createdAt": "2026-09-13T19:44:13.058Z",
+      "role": "workflow:owner",
+      "workflowId": "KCIuipW0TTnCMxkY",
+      "projectId": "WPiLi1dhTYs2ov71",
+      "project": {
+        "updatedAt": "2026-09-13T19:09:09.493Z",
+        "createdAt": "2026-09-11T20:16:40.332Z",
+        "id": "WPiLi1dhTYs2ov71",
+        "name": "Vitalii Pokhyl <pokhylvitalii@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "4a00a311-544e-4270-a735-25e36206388c"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": null,
+    "description": null
+  }
 }

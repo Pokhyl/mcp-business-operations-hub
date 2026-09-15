@@ -1,0 +1,381 @@
+{
+  "updatedAt": "2026-09-13T19:44:19.952Z",
+  "createdAt": "2026-09-13T19:44:19.952Z",
+  "id": "KcrmAnalyticsRefsA1",
+  "name": "ADMIN — KeyCRM Analytics Reference Sync",
+  "description": null,
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -700,
+        -80
+      ],
+      "id": "545201ee-a45e-404d-9794-793e58db270f",
+      "name": "Manual Trigger"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -700,
+        100
+      ],
+      "id": "a7888a24-64b6-40f3-b9d2-ca56e41eb776",
+      "name": "Schedule every 15 minutes"
+    },
+    {
+      "parameters": {
+        "url": "https://openapi.keycrm.app/v1/pipelines",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "limit",
+              "value": "50"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "pagination": {
+            "pagination": {
+              "paginationMode": "updateAParameterInEachRequest",
+              "parameters": {
+                "parameters": [
+                  {
+                    "type": "qs",
+                    "name": "page",
+                    "value": "={{ $pageCount + 1 }}"
+                  }
+                ]
+              },
+              "paginationCompleteWhen": "other",
+              "completeExpression": "={{ $response.body.current_page >= $response.body.last_page }}",
+              "requestInterval": 4000
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -460,
+        0
+      ],
+      "id": "dc92d51c-74df-4d94-9008-fe4f0c6356f6",
+      "name": "Fetch pipelines",
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "TGZJjiNcly8kxlkS",
+          "name": "KeyCRM MCP"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const pipelines=[]; for (const item of items) { if (Array.isArray(item.json?.data)) pipelines.push(...item.json.data); } return [{json:{pipelines}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -220,
+        0
+      ],
+      "id": "de9c0628-ff26-4d0d-8e04-47922c777e2f",
+      "name": "Collect pipelines"
+    },
+    {
+      "parameters": {
+        "url": "https://openapi.keycrm.app/v1/order/source",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "limit",
+              "value": "50"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "pagination": {
+            "pagination": {
+              "paginationMode": "updateAParameterInEachRequest",
+              "parameters": {
+                "parameters": [
+                  {
+                    "type": "qs",
+                    "name": "page",
+                    "value": "={{ $pageCount + 1 }}"
+                  }
+                ]
+              },
+              "paginationCompleteWhen": "other",
+              "completeExpression": "={{ $response.body.current_page >= $response.body.last_page }}",
+              "requestInterval": 4000
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        20,
+        0
+      ],
+      "id": "8a13b176-ca37-4242-8aad-8d4405c0e738",
+      "name": "Fetch sources",
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "TGZJjiNcly8kxlkS",
+          "name": "KeyCRM MCP"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const pipelines=$('Collect pipelines').first().json.pipelines ?? []; const sources=[]; for (const item of $('Fetch sources').all()) { if (Array.isArray(item.json?.data)) sources.push(...item.json.data); } const users=[]; for (const item of items) { if (Array.isArray(item.json?.data)) users.push(...item.json.data); } return [{json:{pipelines,sources,users,synced_at:new Date().toISOString()}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        500,
+        0
+      ],
+      "id": "bd4d5439-1f5a-47ad-8cef-5f46d3eccb6a",
+      "name": "Build reference payload"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH input AS (SELECT $1::jsonb AS pipelines,$2::jsonb AS sources,$3::jsonb AS users,$4::timestamptz AS synced_at),\npipeline_rows AS (\n SELECT (p->>'id')::bigint AS pipeline_id,COALESCE(p->>'title','') AS title,NULLIF(p->>'lead_type','') AS lead_type,NULLIF(p->>'updated_at','')::timestamptz AS keycrm_updated_at,input.synced_at\n FROM input CROSS JOIN LATERAL jsonb_array_elements(input.pipelines) p\n),\nup_p AS (\n INSERT INTO public.keycrm_pipelines(pipeline_id,title,lead_type,keycrm_updated_at,synced_at)\n SELECT pipeline_id,title,lead_type,keycrm_updated_at,synced_at FROM pipeline_rows\n ON CONFLICT(pipeline_id) DO UPDATE SET title=EXCLUDED.title,lead_type=EXCLUDED.lead_type,keycrm_updated_at=EXCLUDED.keycrm_updated_at,synced_at=EXCLUDED.synced_at RETURNING 1\n),\nsource_rows AS (\n SELECT (s->>'id')::bigint AS source_id,COALESCE(s->>'name','') AS name,NULLIF(s->>'alias','') AS alias,NULLIF(s->>'driver','') AS driver,NULLIF(s->>'updated_at','')::timestamptz AS keycrm_updated_at,input.synced_at\n FROM input CROSS JOIN LATERAL jsonb_array_elements(input.sources) s\n),\nup_s AS (\n INSERT INTO public.keycrm_sources(source_id,name,alias,driver,keycrm_updated_at,synced_at)\n SELECT source_id,name,alias,driver,keycrm_updated_at,synced_at FROM source_rows\n ON CONFLICT(source_id) DO UPDATE SET name=EXCLUDED.name,alias=EXCLUDED.alias,driver=EXCLUDED.driver,keycrm_updated_at=EXCLUDED.keycrm_updated_at,synced_at=EXCLUDED.synced_at RETURNING 1\n),\nuser_rows AS (\n SELECT (u->>'id')::bigint AS user_id,COALESCE(NULLIF(u->>'full_name',''),trim(COALESCE(u->>'first_name','')||' '||COALESCE(u->>'last_name','')),'') AS full_name,NULLIF(u->>'username','') AS username,NULLIF(u->>'status','') AS status,NULLIF(u->>'updated_at','')::timestamptz AS keycrm_updated_at,input.synced_at\n FROM input CROSS JOIN LATERAL jsonb_array_elements(input.users) u\n),\nup_u AS (\n INSERT INTO public.keycrm_users(user_id,full_name,username,status,keycrm_updated_at,synced_at)\n SELECT user_id,full_name,username,status,keycrm_updated_at,synced_at FROM user_rows\n ON CONFLICT(user_id) DO UPDATE SET full_name=EXCLUDED.full_name,username=EXCLUDED.username,status=EXCLUDED.status,keycrm_updated_at=EXCLUDED.keycrm_updated_at,synced_at=EXCLUDED.synced_at RETURNING 1\n)\nSELECT (SELECT count(*)::int FROM up_p) AS pipelines_synced,(SELECT count(*)::int FROM up_s) AS sources_synced,(SELECT count(*)::int FROM up_u) AS users_synced,$4::timestamptz AS synced_at;",
+        "options": {
+          "queryReplacement": "={{ [ JSON.stringify($json.pipelines), JSON.stringify($json.sources), JSON.stringify($json.users), $json.synced_at ] }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        740,
+        0
+      ],
+      "id": "32d5c078-af22-4abb-86b6-87b30a28b5ae",
+      "name": "Apply reference sync",
+      "credentials": {
+        "postgres": {
+          "id": "AdVJ2zREIvjZqGH5",
+          "name": "Application PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://openapi.keycrm.app/v1/users",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "limit",
+              "value": "50"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "pagination": {
+            "pagination": {
+              "paginationMode": "updateAParameterInEachRequest",
+              "parameters": {
+                "parameters": [
+                  {
+                    "type": "qs",
+                    "name": "page",
+                    "value": "={{ $pageCount + 1 }}"
+                  }
+                ]
+              },
+              "paginationCompleteWhen": "other",
+              "completeExpression": "={{ $response.body.current_page >= $response.body.last_page }}",
+              "requestInterval": 4000
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        250,
+        0
+      ],
+      "id": "9f1b6f91-cc94-4ad9-829f-7379ca0c2264",
+      "name": "Fetch users",
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "TGZJjiNcly8kxlkS",
+          "name": "KeyCRM MCP"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch pipelines",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule every 15 minutes": {
+      "main": [
+        [
+          {
+            "node": "Fetch pipelines",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch pipelines": {
+      "main": [
+        [
+          {
+            "node": "Collect pipelines",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect pipelines": {
+      "main": [
+        [
+          {
+            "node": "Fetch sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch sources": {
+      "main": [
+        [
+          {
+            "node": "Fetch users",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build reference payload": {
+      "main": [
+        [
+          {
+            "node": "Apply reference sync",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch users": {
+      "main": [
+        [
+          {
+            "node": "Build reference payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": null,
+  "nodeGroups": [],
+  "pinData": null,
+  "versionId": "9070bec7-155b-4574-9f69-488cd19806e2",
+  "activeVersionId": null,
+  "versionCounter": 1,
+  "triggerCount": 0,
+  "sourceWorkflowId": null,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-09-13T19:44:19.952Z",
+      "createdAt": "2026-09-13T19:44:19.952Z",
+      "role": "workflow:owner",
+      "workflowId": "KcrmAnalyticsRefsA1",
+      "projectId": "WPiLi1dhTYs2ov71",
+      "project": {
+        "updatedAt": "2026-09-13T19:09:09.493Z",
+        "createdAt": "2026-09-11T20:16:40.332Z",
+        "id": "WPiLi1dhTYs2ov71",
+        "name": "Vitalii Pokhyl <pokhylvitalii@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "4a00a311-544e-4270-a735-25e36206388c"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": null,
+    "description": null
+  }
+}

@@ -1,8 +1,8 @@
 {
-  "updatedAt": "2026-09-13T19:46:18.907Z",
-  "createdAt": "2026-09-03T19:33:25.856Z",
-  "id": "tUxRIiXHh2UaWflF",
-  "name": "MCP — Gmail Search",
+  "updatedAt": "2026-09-13T19:47:52.544Z",
+  "createdAt": "2026-09-13T19:47:52.544Z",
+  "id": "yej0SNKc4Ovb4rzq",
+  "name": "MCP — KeyCRM Customer Search",
   "description": null,
   "active": false,
   "isArchived": false,
@@ -24,99 +24,23 @@
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1.2,
       "position": [
-        -640,
-        -32
+        -800,
+        -80
       ],
-      "id": "d7869e2a-d0a9-4fcf-8e9a-d61fb7884c13",
+      "id": "c657d05d-4337-4bf0-9ee5-cf7d1b5deadd",
       "name": "When Executed by Another Workflow"
     },
     {
       "parameters": {
-        "operation": "getAll",
-        "limit": "={{ $('Validate input').item.json.limit }}",
-        "filters": {
-          "q": "={{ $('Validate input').item.json.query }}"
-        }
-      },
-      "type": "n8n-nodes-base.gmail",
-      "typeVersion": 2.2,
-      "position": [
-        480,
-        -128
-      ],
-      "id": "abc2cb1b-2f91-444e-873e-cae86de2012a",
-      "name": "Get many messages",
-      "webhookId": "f5591731-77e9-451c-82a8-5f202c71fcb2",
-      "credentials": {
-        "gmailOAuth2": {
-          "id": "FJ3qlbs3RFMHmomW",
-          "name": "Gmail account"
-        }
-      },
-      "onError": "continueErrorOutput",
-      "alwaysOutputData": true
-    },
-    {
-      "parameters": {
-        "jsCode": "return items.map(item => {\n  const j = item.json;\n\n  return {\n    json: {\n      id: j.id ?? null,\n      threadId: j.threadId ?? null,\n      from: j.from?.text ?? null,\n      to: j.to?.text ?? null,\n      subject: j.subject ?? null,\n      date: j.date ?? null,\n      body: j.text ?? null\n    }\n  };\n});"
+        "jsCode": "const input = items[0]?.json ?? {};\n\nconst query =\n  typeof input.query === 'string'\n    ? input.query.trim()\n    : '';\n\nconst hasLimit =\n  input.limit !== undefined &&\n  input.limit !== null &&\n  input.limit !== '';\n\nconst limit = hasLimit\n  ? Number(input.limit)\n  : 10;\n\nconst inputValid =\n  query.length > 0 &&\n  Number.isInteger(limit) &&\n  limit >= 1 &&\n  limit <= 50;\n\nreturn [\n  {\n    json: {\n      ...input,\n      query,\n      limit,\n      input_valid: inputValid\n    }\n  }\n];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        960,
-        -320
+        -560,
+        -80
       ],
-      "id": "b199a95d-7dd2-4288-bad0-9415cb085435",
-      "name": "Format email results"
-    },
-    {
-      "parameters": {
-        "operation": "get",
-        "messageId": "={{$json.id}}",
-        "simple": false,
-        "options": {}
-      },
-      "type": "n8n-nodes-base.gmail",
-      "typeVersion": 2.2,
-      "position": [
-        720,
-        -208
-      ],
-      "id": "1ae4481d-62e1-4528-a061-52fc725e2ded",
-      "name": "Get a message",
-      "webhookId": "8cd73b85-359b-4816-ba4c-f0b300922fa9",
-      "credentials": {
-        "gmailOAuth2": {
-          "id": "FJ3qlbs3RFMHmomW",
-          "name": "Gmail account"
-        }
-      },
-      "onError": "continueErrorOutput"
-    },
-    {
-      "parameters": {
-        "jsCode": "const data = items.map(item => item.json ?? {}).filter(item => item.id !== undefined && item.id !== null && item.id !== '');\nreturn [{ json: { success: true, data, meta: { tool: 'search_emails', count: data.length } } }];"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        1152,
-        -320
-      ],
-      "id": "ff086c29-afc9-466d-ac1e-1d7ff5aa12d5",
-      "name": "Format MCP response"
-    },
-    {
-      "parameters": {
-        "jsCode": "const input = items[0]?.json ?? {};\n\nconst query =\n  typeof input.query === 'string'\n    ? input.query.trim()\n    : '';\n\nconst hasLimit =\n  input.limit !== undefined &&\n  input.limit !== null &&\n  input.limit !== '';\n\nconst limit = hasLimit\n  ? Number(input.limit)\n  : 5;\n\nconst inputValid =\n  query.length > 0 &&\n  Number.isInteger(limit) &&\n  limit >= 1 &&\n  limit <= 50;\n\nreturn [\n  {\n    json: {\n      ...input,\n      query,\n      limit,\n      input_valid: inputValid\n    }\n  }\n];"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        -416,
-        -32
-      ],
-      "id": "92f5ec68-c90d-404a-87a7-d407dd7135a7",
+      "id": "8ac9bfea-7305-4736-9558-a72b4283754e",
       "name": "Validate input"
     },
     {
@@ -130,8 +54,8 @@
           },
           "conditions": [
             {
-              "id": "7856264e-b722-45d0-bf3b-070b816fbe90",
-              "leftValue": "={{$json.input_valid}}",
+              "id": "c6e2e96c-6bcd-4591-916a-761e0821b8a7",
+              "leftValue": "={{ $json.input_valid }}",
               "rightValue": "",
               "operator": {
                 "type": "boolean",
@@ -147,37 +71,24 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        -192,
-        -32
+        -320,
+        -80
       ],
-      "id": "83bdeda8-95dd-4447-997e-23a344ae351b",
+      "id": "06df68c2-8c64-4672-8908-eaf9bdba538d",
       "name": "Is input valid?"
     },
     {
       "parameters": {
-        "jsCode": "return [\n  {\n    json: {\n      success: false,\n      error: {\n        code: 'INVALID_INPUT',\n        message: 'query must be a non-empty string and limit must be an integer between 1 and 50'\n      },\n      meta: {\n        tool: 'search_emails',\n        count: 0\n      }\n    }\n  }\n];"
+        "jsCode": "return [\n  {\n    json: {\n      success: false,\n      error: {\n        code: 'INVALID_INPUT',\n        message: 'query must be a non-empty string and limit must be an integer between 1 and 50'\n      },\n      meta: {\n        tool: 'search_customers',\n        count: 0\n      }\n    }\n  }\n];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        48,
-        128
+        -64,
+        160
       ],
-      "id": "795ff42e-5262-493f-9e32-2e4d751eaf85",
+      "id": "86816430-e986-42c9-b0cc-40d93849b204",
       "name": "Format invalid input error"
-    },
-    {
-      "parameters": {
-        "jsCode": "return [\n  {\n    json: {\n      success: false,\n      error: {\n        code: 'UPSTREAM_ERROR',\n        message: 'Gmail request failed'\n      },\n      meta: {\n        tool: 'search_emails',\n        count: 0\n      }\n    }\n  }\n];"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        912,
-        16
-      ],
-      "id": "c7543149-008a-40fe-a03a-abcacf28a2a5",
-      "name": "Format Gmail error"
     },
     {
       "parameters": {
@@ -192,142 +103,9 @@
           "mappingMode": "defineBelow",
           "value": {
             "action": "start",
-            "tool_name": "search_emails",
+            "tool_name": "search_customers",
             "client_name": "mcp",
-            "arguments_json": "={{ { query: '[REDACTED]', limit: $json.limit } }}"
-          },
-          "matchingColumns": [],
-          "schema": [
-            {
-              "id": "action",
-              "displayName": "action",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "string",
-              "removed": false
-            },
-            {
-              "id": "audit_id",
-              "displayName": "audit_id",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "string",
-              "removed": false
-            },
-            {
-              "id": "request_id",
-              "displayName": "request_id",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "string",
-              "removed": false
-            },
-            {
-              "id": "tool_name",
-              "displayName": "tool_name",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "string",
-              "removed": false
-            },
-            {
-              "id": "arguments_json",
-              "displayName": "arguments_json",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "object",
-              "removed": false
-            },
-            {
-              "id": "status",
-              "displayName": "status",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "string",
-              "removed": false
-            },
-            {
-              "id": "error_code",
-              "displayName": "error_code",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "string",
-              "removed": false
-            },
-            {
-              "id": "error_message",
-              "displayName": "error_message",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "string",
-              "removed": false
-            },
-            {
-              "id": "duration_ms",
-              "displayName": "duration_ms",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "client_name",
-              "displayName": "client_name",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "string",
-              "removed": false
-            }
-          ],
-          "attemptToConvertTypes": false,
-          "convertFieldsToString": true
-        },
-        "options": {}
-      },
-      "type": "n8n-nodes-base.executeWorkflow",
-      "typeVersion": 1.3,
-      "position": [
-        240,
-        -128
-      ],
-      "id": "48958f06-015c-41fe-84e7-488eacd3c7fc",
-      "name": "Audit start"
-    },
-    {
-      "parameters": {
-        "workflowId": {
-          "__rl": true,
-          "value": "OALvijdov0sXpsTO",
-          "mode": "list",
-          "cachedResultUrl": "/workflow/OALvijdov0sXpsTO",
-          "cachedResultName": "MCP — Audit Tool Call"
-        },
-        "workflowInputs": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "action": "finish",
-            "audit_id": "={{ $('Audit start').item.json.audit_id }}",
-            "status": "succeeded",
-            "duration_ms": "={{ Date.now() - new Date($('Audit start').item.json.started_at).getTime() }}"
+            "arguments_json": "={{ {\n  query: '[REDACTED]',\n  limit: $json.limit\n} }}"
           },
           "matchingColumns": [],
           "schema": [
@@ -347,7 +125,8 @@
               "defaultMatch": false,
               "display": true,
               "canBeUsedToMatch": true,
-              "type": "string"
+              "type": "string",
+              "removed": true
             },
             {
               "id": "request_id",
@@ -356,7 +135,8 @@
               "defaultMatch": false,
               "display": true,
               "canBeUsedToMatch": true,
-              "type": "string"
+              "type": "string",
+              "removed": true
             },
             {
               "id": "tool_name",
@@ -383,7 +163,8 @@
               "defaultMatch": false,
               "display": true,
               "canBeUsedToMatch": true,
-              "type": "string"
+              "type": "string",
+              "removed": true
             },
             {
               "id": "error_code",
@@ -392,7 +173,8 @@
               "defaultMatch": false,
               "display": true,
               "canBeUsedToMatch": true,
-              "type": "string"
+              "type": "string",
+              "removed": true
             },
             {
               "id": "error_message",
@@ -401,7 +183,8 @@
               "defaultMatch": false,
               "display": true,
               "canBeUsedToMatch": true,
-              "type": "string"
+              "type": "string",
+              "removed": true
             },
             {
               "id": "duration_ms",
@@ -409,7 +192,8 @@
               "required": false,
               "defaultMatch": false,
               "display": true,
-              "canBeUsedToMatch": true
+              "canBeUsedToMatch": true,
+              "removed": true
             },
             {
               "id": "client_name",
@@ -429,11 +213,194 @@
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.3,
       "position": [
-        1360,
-        -320
+        -64,
+        -80
       ],
-      "id": "388ae880-91b9-49fd-a318-412b0e037502",
+      "id": "4632581b-a4aa-4d7a-a966-d2e227e90d30",
+      "name": "Audit start"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH input AS (\n    SELECT $1::text AS q, lower($1::text) AS q_lower,\n           regexp_replace($1::text, '[^0-9]', '', 'g') AS q_digits,\n           $2::int AS result_limit\n), candidates AS (\n    SELECT c.buyer_id,c.full_name,c.phones,c.emails,c.keycrm_updated_at,\n      CASE WHEN c.buyer_id::text=i.q THEN 1000\n           WHEN EXISTS (SELECT 1 FROM unnest(c.emails) e WHERE lower(e)=i.q_lower) THEN 950\n           WHEN length(i.q_digits)>=4 AND EXISTS (SELECT 1 FROM unnest(c.phones) p WHERE regexp_replace(p,'[^0-9]','','g')=i.q_digits) THEN 900\n           WHEN lower(c.full_name)=i.q_lower THEN 850\n           WHEN lower(c.full_name) LIKE i.q_lower||'%' THEN 800\n           WHEN lower(c.full_name) LIKE '%'||i.q_lower||'%' THEN 750\n           WHEN EXISTS (SELECT 1 FROM unnest(c.emails) e WHERE lower(e) LIKE '%'||i.q_lower||'%') THEN 700\n           WHEN length(i.q_digits)>=4 AND EXISTS (SELECT 1 FROM unnest(c.phones) p WHERE regexp_replace(p,'[^0-9]','','g') LIKE '%'||i.q_digits||'%') THEN 650\n           ELSE (similarity(lower(c.full_name),i.q_lower)*500)::int END AS score\n    FROM public.keycrm_customers c CROSS JOIN input i\n    WHERE c.buyer_id::text=i.q OR lower(c.full_name) LIKE '%'||i.q_lower||'%'\n       OR (length(i.q_lower)>=2 AND lower(c.full_name) % i.q_lower)\n       OR EXISTS (SELECT 1 FROM unnest(c.emails) e WHERE lower(e)=i.q_lower OR lower(e) LIKE '%'||i.q_lower||'%')\n       OR (length(i.q_digits)>=4 AND EXISTS (SELECT 1 FROM unnest(c.phones) p WHERE regexp_replace(p,'[^0-9]','','g') LIKE '%'||i.q_digits||'%'))\n), selected AS (\n    SELECT * FROM candidates ORDER BY score DESC,lower(full_name),buyer_id\n    LIMIT (SELECT result_limit FROM input)\n)\nSELECT COALESCE(jsonb_agg(jsonb_build_object('buyer_id',buyer_id,'full_name',full_name,'phones',to_jsonb(phones),'emails',to_jsonb(emails),'keycrm_updated_at',keycrm_updated_at) ORDER BY score DESC,lower(full_name),buyer_id),'[]'::jsonb) AS customers FROM selected;",
+        "options": {
+          "queryReplacement": "={{ [ $('Validate input').first().json.query, $('Validate input').first().json.limit ] }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        480,
+        -80
+      ],
+      "id": "b70edc2c-a9e8-4af6-99f8-4b220d0217e7",
+      "name": "Search customer index",
+      "credentials": {
+        "postgres": {
+          "id": "Zj9PZx7iF6uK469i",
+          "name": "mcp_read"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = items[0]?.json ?? {};\nconst customers = Array.isArray(response.customers) ? response.customers : [];\nconst data = customers.map((customer) => ({ buyer_id: customer.buyer_id ?? null, full_name: customer.full_name ?? '', phones: Array.isArray(customer.phones) ? customer.phones : [], emails: Array.isArray(customer.emails) ? customer.emails : [], keycrm_updated_at: customer.keycrm_updated_at ?? null }));\nreturn [{ json: { success: true, data, meta: { tool: 'search_customers', count: data.length } } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        736,
+        -160
+      ],
+      "id": "a34928f4-8ac5-49ef-96a3-2e930afeacd2",
+      "name": "Format search results"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "OALvijdov0sXpsTO",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/OALvijdov0sXpsTO",
+          "cachedResultName": "MCP — Audit Tool Call"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "action": "finish",
+            "status": "succeeded",
+            "audit_id": "={{ $('Audit start').item.json.audit_id }}",
+            "duration_ms": "={{ Date.now() - new Date($('Audit start').item.json.started_at).getTime() }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "action",
+              "displayName": "action",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "audit_id",
+              "displayName": "audit_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "request_id",
+              "displayName": "request_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "id": "tool_name",
+              "displayName": "tool_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "id": "arguments_json",
+              "displayName": "arguments_json",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object",
+              "removed": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "error_code",
+              "displayName": "error_code",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "id": "error_message",
+              "displayName": "error_message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "id": "duration_ms",
+              "displayName": "duration_ms",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "client_name",
+              "displayName": "client_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        992,
+        -160
+      ],
+      "id": "65ba50a8-0e78-4283-a9a7-f3c5e6a90e90",
       "name": "Audit success"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: $('Format search results').first().json }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1248,
+        -160
+      ],
+      "id": "b9b5cc01-be5c-454a-ac5b-aece14553f8d",
+      "name": "Return MCP response"
     },
     {
       "parameters": {
@@ -463,7 +430,8 @@
               "defaultMatch": false,
               "display": true,
               "canBeUsedToMatch": true,
-              "type": "string"
+              "type": "string",
+              "removed": false
             },
             {
               "id": "audit_id",
@@ -472,7 +440,8 @@
               "defaultMatch": false,
               "display": true,
               "canBeUsedToMatch": true,
-              "type": "string"
+              "type": "string",
+              "removed": false
             },
             {
               "id": "request_id",
@@ -481,7 +450,8 @@
               "defaultMatch": false,
               "display": true,
               "canBeUsedToMatch": true,
-              "type": "string"
+              "type": "string",
+              "removed": true
             },
             {
               "id": "tool_name",
@@ -490,7 +460,8 @@
               "defaultMatch": false,
               "display": true,
               "canBeUsedToMatch": true,
-              "type": "string"
+              "type": "string",
+              "removed": true
             },
             {
               "id": "arguments_json",
@@ -499,7 +470,8 @@
               "defaultMatch": false,
               "display": true,
               "canBeUsedToMatch": true,
-              "type": "object"
+              "type": "object",
+              "removed": true
             },
             {
               "id": "status",
@@ -508,7 +480,8 @@
               "defaultMatch": false,
               "display": true,
               "canBeUsedToMatch": true,
-              "type": "string"
+              "type": "string",
+              "removed": false
             },
             {
               "id": "error_code",
@@ -517,7 +490,8 @@
               "defaultMatch": false,
               "display": true,
               "canBeUsedToMatch": true,
-              "type": "string"
+              "type": "string",
+              "removed": false
             },
             {
               "id": "error_message",
@@ -526,7 +500,8 @@
               "defaultMatch": false,
               "display": true,
               "canBeUsedToMatch": true,
-              "type": "string"
+              "type": "string",
+              "removed": false
             },
             {
               "id": "duration_ms",
@@ -534,7 +509,8 @@
               "required": false,
               "defaultMatch": false,
               "display": true,
-              "canBeUsedToMatch": true
+              "canBeUsedToMatch": true,
+              "removed": false
             },
             {
               "id": "client_name",
@@ -543,7 +519,8 @@
               "defaultMatch": false,
               "display": true,
               "canBeUsedToMatch": true,
-              "type": "string"
+              "type": "string",
+              "removed": true
             }
           ],
           "attemptToConvertTypes": false,
@@ -554,71 +531,37 @@
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.3,
       "position": [
-        1136,
-        16
+        992,
+        80
       ],
-      "id": "c8e060a5-871c-4708-b484-dfa170986336",
+      "id": "21b91dca-7840-4fea-a607-9875039aee6c",
       "name": "Audit failed"
     },
     {
       "parameters": {
-        "jsCode": "return [\n  {\n    json: $('Format MCP response').first().json\n  }\n];"
+        "jsCode": "return [{ json: $('Format database error').first().json }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1568,
-        -320
+        1248,
+        80
       ],
-      "id": "104463e3-8f8d-48c8-8cc2-89ad6115b205",
-      "name": "Return MCP response"
-    },
-    {
-      "parameters": {
-        "jsCode": "return [\n  {\n    json: $('Format Gmail error').first().json\n  }\n];"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        1344,
-        16
-      ],
-      "id": "3c80bbce-687c-4e43-a6d7-efecd931c8d4",
+      "id": "e8dc4823-9de8-474d-9ec0-33691e49fd01",
       "name": "Return MCP error"
     },
     {
       "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict",
-            "version": 3
-          },
-          "conditions": [
-            {
-              "id": "gmail-has-message-id",
-              "leftValue": "={{ !!$json.id }}",
-              "rightValue": "",
-              "operator": {
-                "type": "boolean",
-                "operation": "true",
-                "singleValue": true
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
+        "jsCode": "return [{ json: { success:false, error:{ code:'UPSTREAM_ERROR', message:'Customer search index query failed' }, meta:{ tool:'search_customers', count:0 } } }];"
       },
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.3,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
-        680,
-        -128
+        736,
+        80
       ],
-      "id": "a9cc4ce6-b84b-4bf8-8bb7-12346bb2f920",
-      "name": "Has messages?"
+      "id": "732c240c-a8f0-44f9-9778-dcd70cb456d7",
+      "name": "Format database error"
     }
   ],
   "connections": {
@@ -666,61 +609,32 @@
       "main": [
         [
           {
-            "node": "Get many messages",
+            "node": "Search customer index",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Get many messages": {
+    "Search customer index": {
       "main": [
         [
           {
-            "node": "Has messages?",
+            "node": "Format search results",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Format Gmail error",
+            "node": "Format database error",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Get a message": {
-      "main": [
-        [
-          {
-            "node": "Format email results",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Format Gmail error",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Format email results": {
-      "main": [
-        [
-          {
-            "node": "Format MCP response",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Format MCP response": {
+    "Format search results": {
       "main": [
         [
           {
@@ -742,7 +656,7 @@
         ]
       ]
     },
-    "Format Gmail error": {
+    "Format database error": {
       "main": [
         [
           {
@@ -763,74 +677,43 @@
           }
         ]
       ]
-    },
-    "Has messages?": {
-      "main": [
-        [
-          {
-            "node": "Get a message",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Format MCP response",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
     }
   },
   "settings": {
-    "executionOrder": "v1",
-    "binaryMode": "separate",
-    "availableInMCP": false
+    "executionOrder": "v1"
   },
   "staticData": null,
-  "meta": {
-    "templateCredsSetupCompleted": true
-  },
+  "meta": null,
   "nodeGroups": [],
-  "pinData": {
-    "When Executed by Another Workflow": [
-      {
-        "json": {
-          "query": "has:attachment",
-          "limit": 1
-        }
-      }
-    ]
-  },
-  "versionId": "bca0c684-1b4d-4b19-8715-a23fa30f9eb5",
+  "pinData": null,
+  "versionId": "54d3992d-41ac-48a4-8824-1a305520ec8f",
   "activeVersionId": null,
-  "versionCounter": 57,
+  "versionCounter": 1,
   "triggerCount": 0,
   "sourceWorkflowId": null,
   "tags": [],
   "shared": [
     {
-      "updatedAt": "2026-09-13T21:39:24.902Z",
-      "createdAt": "2026-09-13T21:39:24.902Z",
+      "updatedAt": "2026-09-13T19:47:52.544Z",
+      "createdAt": "2026-09-13T19:47:52.544Z",
       "role": "workflow:owner",
-      "workflowId": "tUxRIiXHh2UaWflF",
-      "projectId": "GA8fFOeyPJUAti7Y",
+      "workflowId": "yej0SNKc4Ovb4rzq",
+      "projectId": "WPiLi1dhTYs2ov71",
       "project": {
-        "updatedAt": "2026-09-13T21:36:19.262Z",
-        "createdAt": "2026-09-13T21:36:19.262Z",
-        "id": "GA8fFOeyPJUAti7Y",
-        "name": "Unnamed Project",
+        "updatedAt": "2026-09-13T19:09:09.493Z",
+        "createdAt": "2026-09-11T20:16:40.332Z",
+        "id": "WPiLi1dhTYs2ov71",
+        "name": "Vitalii Pokhyl <pokhylvitalii@gmail.com>",
         "type": "personal",
         "icon": null,
         "description": null,
         "customTelemetryTags": [],
-        "creatorId": "2ac7bdf8-8dde-4ba9-acd7-3640352a1b47"
+        "creatorId": "4a00a311-544e-4270-a735-25e36206388c"
       }
     }
   ],
   "versionMetadata": {
-    "name": "Version 98f525fe",
-    "description": ""
+    "name": null,
+    "description": null
   }
 }

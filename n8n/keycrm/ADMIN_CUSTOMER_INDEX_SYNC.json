@@ -1,0 +1,343 @@
+{
+  "updatedAt": "2026-09-13T19:45:25.594Z",
+  "createdAt": "2026-09-13T19:45:25.594Z",
+  "id": "KP1EPFbemTrxbkcY",
+  "name": "ADMIN — KeyCRM Customer Index Sync",
+  "description": null,
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -608,
+        -64
+      ],
+      "id": "6b33ea03-327a-44f2-8dad-6a06b6d0be79",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "url": "https://openapi.keycrm.app/v1/buyer",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "limit",
+              "value": "50"
+            },
+            {
+              "name": "page",
+              "value": "1"
+            },
+            {
+              "name": "filter[buyer_id]",
+              "value": "={{ $json.buyer_ids }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 4000
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        160,
+        -64
+      ],
+      "id": "7022211b-0190-4c9b-a240-6ba7eb913380",
+      "name": "Fetch buyers page",
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "TGZJjiNcly8kxlkS",
+          "name": "KeyCRM MCP"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const syncedAt = new Date().toISOString();\nconst result = [];\n\nfor (const item of items) {\n  const response = item.json ?? {};\n\n  const buyers = Array.isArray(response.data)\n    ? response.data\n    : [];\n\n  for (const buyer of buyers) {\n    result.push({\n      json: {\n        buyer_id: String(buyer.id),\n\n        full_name:\n          typeof buyer.full_name === 'string'\n            ? buyer.full_name.trim()\n            : '',\n\n        phones:\n          Array.isArray(buyer.phone)\n            ? buyer.phone\n                .filter((value) => typeof value === 'string')\n                .map((value) => value.trim())\n                .filter(Boolean)\n            : [],\n\n        emails:\n          Array.isArray(buyer.email)\n            ? buyer.email\n                .filter((value) => typeof value === 'string')\n                .map((value) => value.trim().toLowerCase())\n                .filter(Boolean)\n            : [],\n\n        keycrm_updated_at:\n          buyer.updated_at || null,\n\n        synced_at: syncedAt\n      }\n    });\n  }\n}\n\nreturn result;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        352,
+        -64
+      ],
+      "id": "839d500a-5bf5-41ac-bef4-08482d3961df",
+      "name": "Normalize buyers"
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "keycrm_customers",
+          "mode": "list",
+          "cachedResultName": "keycrm_customers"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {
+            "buyer_id": 0
+          },
+          "matchingColumns": [
+            "buyer_id"
+          ],
+          "schema": [
+            {
+              "id": "buyer_id",
+              "displayName": "buyer_id",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "full_name",
+              "displayName": "full_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "phones",
+              "displayName": "phones",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "array",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "emails",
+              "displayName": "emails",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "array",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "keycrm_updated_at",
+              "displayName": "keycrm_updated_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "synced_at",
+              "displayName": "synced_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "queryBatching": "transaction"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        560,
+        -64
+      ],
+      "id": "f77dff33-4965-461f-ab34-f9af89d35bf6",
+      "name": "Upsert customer index",
+      "credentials": {
+        "postgres": {
+          "id": "AdVJ2zREIvjZqGH5",
+          "name": "Application PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://openapi.keycrm.app/v1/buyer",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "limit",
+              "value": "1"
+            },
+            {
+              "name": "page",
+              "value": "1"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -384,
+        -64
+      ],
+      "id": "60d9e2c0-fdea-4fab-a76b-877fc9673dd3",
+      "name": "Get latest buyer",
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "TGZJjiNcly8kxlkS",
+          "name": "KeyCRM MCP"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = items[0]?.json ?? {};\n\nconst latestBuyer =\n  Array.isArray(response.data) && response.data.length > 0\n    ? response.data[0]\n    : null;\n\nconst maxBuyerId = Number(latestBuyer?.id);\n\nif (!Number.isInteger(maxBuyerId) || maxBuyerId < 1) {\n  throw new Error('Could not determine latest KeyCRM buyer ID');\n}\n\nconst batchSize = 50;\nconst batches = [];\n\nfor (let startId = 1; startId <= maxBuyerId; startId += batchSize) {\n  const endId = Math.min(startId + batchSize - 1, maxBuyerId);\n\n  const ids = [];\n\n  for (let id = startId; id <= endId; id++) {\n    ids.push(id);\n  }\n\n  batches.push({\n    start_id: startId,\n    end_id: endId,\n    buyer_ids: ids.join(',')\n  });\n}\n\nconst batchCount = batches.length;\n\nreturn batches.map((batch, index) => ({\n  json: {\n    batch_number: index + 1,\n    batch_count: batchCount,\n    max_buyer_id: maxBuyerId,\n    ...batch\n  }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -160,
+        -64
+      ],
+      "id": "57f9ca07-7a1a-47ab-88e4-239f331567f0",
+      "name": "Build buyer ID batches"
+    }
+  ],
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Get latest buyer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch buyers page": {
+      "main": [
+        [
+          {
+            "node": "Normalize buyers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize buyers": {
+      "main": [
+        [
+          {
+            "node": "Upsert customer index",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get latest buyer": {
+      "main": [
+        [
+          {
+            "node": "Build buyer ID batches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build buyer ID batches": {
+      "main": [
+        [
+          {
+            "node": "Fetch buyers page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "staticData": null,
+  "meta": null,
+  "nodeGroups": [],
+  "pinData": {},
+  "versionId": "addac8a0-1130-49a5-85d8-2050a25b0607",
+  "activeVersionId": null,
+  "versionCounter": 1,
+  "triggerCount": 0,
+  "sourceWorkflowId": null,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-09-13T19:45:25.594Z",
+      "createdAt": "2026-09-13T19:45:25.594Z",
+      "role": "workflow:owner",
+      "workflowId": "KP1EPFbemTrxbkcY",
+      "projectId": "WPiLi1dhTYs2ov71",
+      "project": {
+        "updatedAt": "2026-09-13T19:09:09.493Z",
+        "createdAt": "2026-09-11T20:16:40.332Z",
+        "id": "WPiLi1dhTYs2ov71",
+        "name": "Vitalii Pokhyl <pokhylvitalii@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "4a00a311-544e-4270-a735-25e36206388c"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": null,
+    "description": null
+  }
+}

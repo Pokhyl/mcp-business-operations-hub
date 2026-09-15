@@ -1,8 +1,8 @@
 {
-  "updatedAt": "2026-09-13T19:48:00.177Z",
-  "createdAt": "2026-09-05T11:15:59.079Z",
-  "id": "zAfGZsJszUKu2NIp",
-  "name": "MCP — Gmail Attachment",
+  "updatedAt": "2026-09-13T19:44:59.531Z",
+  "createdAt": "2026-09-13T19:44:59.531Z",
+  "id": "KcrmMgrSalesStatsA1",
+  "name": "MCP — KeyCRM Manager Sales Stats",
   "description": null,
   "active": false,
   "isArchived": false,
@@ -12,10 +12,13 @@
         "workflowInputs": {
           "values": [
             {
-              "name": "message_id"
+              "name": "manager"
             },
             {
-              "name": "filename"
+              "name": "start"
+            },
+            {
+              "name": "end"
             }
           ]
         }
@@ -23,23 +26,23 @@
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1.2,
       "position": [
-        -576,
-        -48
+        -960,
+        0
       ],
-      "id": "b626f488-cb07-488a-9215-46146c0950de",
+      "id": "ac3fbff4-767a-4d29-b812-07c28fa644b3",
       "name": "When Executed by Another Workflow"
     },
     {
       "parameters": {
-        "jsCode": "const input = items[0]?.json ?? {};\n\nconst messageId =\n  typeof input.message_id === 'string'\n    ? input.message_id.trim()\n    : '';\n\nconst filenameProvided =\n  input.filename !== undefined &&\n  input.filename !== null &&\n  input.filename !== '';\n\nconst filename =\n  typeof input.filename === 'string'\n    ? input.filename.trim()\n    : '';\n\nconst inputValid =\n  messageId.length > 0 &&\n  (!filenameProvided || typeof input.filename === 'string');\n\nreturn [\n  {\n    json: {\n      ...input,\n      message_id: messageId,\n      filename,\n      input_valid: inputValid\n    }\n  }\n];"
+        "jsCode": "const input=items[0]?.json??{}; const manager=typeof input.manager==='string'?input.manager.trim():''; const start=typeof input.start==='string'?input.start.trim():''; const end=typeof input.end==='string'?input.end.trim():''; const s=Date.parse(start), e=Date.parse(end); const tz=v=>/(Z|[+-]\\d{2}:\\d{2})$/i.test(v); const ok=manager.length>=2&&manager.length<=200&&Number.isFinite(s)&&Number.isFinite(e)&&tz(start)&&tz(end)&&e>s&&(e-s)<=366*86400000; return [{json:{...input,manager,start,end,start_iso:Number.isFinite(s)?new Date(s).toISOString():null,end_iso:Number.isFinite(e)?new Date(e).toISOString():null,input_valid:ok}}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -352,
-        -48
+        -736,
+        0
       ],
-      "id": "69e130e3-90cc-4eff-9d62-51c8241e724c",
+      "id": "9f5ed1dc-d403-4bc9-80e0-6a326f4a5310",
       "name": "Validate input"
     },
     {
@@ -53,7 +56,7 @@
           },
           "conditions": [
             {
-              "id": "930a7004-ba9a-45bc-9c05-b351bd45f62c",
+              "id": "3629916e-ee18-4144-ab37-656bf619c419",
               "leftValue": "={{ $json.input_valid }}",
               "rightValue": "",
               "operator": {
@@ -70,23 +73,23 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        -128,
-        -48
+        -512,
+        0
       ],
-      "id": "c87895ad-050e-4613-8491-151f7ddd0ef2",
+      "id": "69c44aec-e59d-4004-8289-b92b039dbdc0",
       "name": "Is input valid?"
     },
     {
       "parameters": {
-        "jsCode": "return [\n  {\n    json: {\n      success: false,\n      error: {\n        code: 'INVALID_INPUT',\n        message: 'message_id must be a non-empty string and filename must be a string when provided'\n      },\n      meta: {\n        tool: 'get_email_attachment',\n        count: 0\n      }\n    }\n  }\n];"
+        "jsCode": "return [{json:{success:false,error:{code:'INVALID_INPUT',message:'manager must be 2..200 chars; start/end must be RFC3339 timestamps with timezone, end > start, window <= 366 days'},meta:{tool:'get_manager_sales_stats',count:0}}}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        96,
-        48
+        -288,
+        224
       ],
-      "id": "3f8eba93-c251-4daa-bf5d-c85ec25b34bd",
+      "id": "4a9c0563-f722-400c-8d5b-a72a1c14b46b",
       "name": "Format invalid input error"
     },
     {
@@ -102,9 +105,9 @@
           "mappingMode": "defineBelow",
           "value": {
             "action": "start",
-            "tool_name": "get_email_attachment",
+            "tool_name": "get_manager_sales_stats",
             "client_name": "mcp",
-            "arguments_json": "={{ {\n  message_id: $json.message_id,\n  filename: $json.filename || null\n} }}"
+            "arguments_json": "={{ { manager: '[REDACTED]', start: $('Validate input').first().json.start_iso, end: $('Validate input').first().json.end_iso } }}"
           },
           "matchingColumns": [],
           "schema": [
@@ -206,56 +209,90 @@
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.3,
       "position": [
-        96,
-        -144
+        -288,
+        -64
       ],
-      "id": "ba404060-e34d-4a63-a873-5b117c59598f",
+      "id": "cb519b5e-9138-4479-9f9a-a64ebc49f21c",
       "name": "Audit start"
     },
     {
       "parameters": {
-        "url": "={{ 'https://gmail.googleapis.com/gmail/v1/users/me/messages/' + $('Validate input').item.json.message_id }}",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "gmailOAuth2",
+        "url": "https://openapi.keycrm.app/v1/users",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
             {
-              "name": "format",
-              "value": "full"
+              "name": "limit",
+              "value": "50"
+            },
+            {
+              "name": "filter[status]",
+              "value": "active"
             }
           ]
         },
-        "options": {}
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "pagination": {
+            "pagination": {
+              "paginationMode": "updateAParameterInEachRequest",
+              "parameters": {
+                "parameters": [
+                  {
+                    "type": "qs",
+                    "name": "page",
+                    "value": "={{ $pageCount + 1 }}"
+                  }
+                ]
+              },
+              "paginationCompleteWhen": "other",
+              "completeExpression": "={{ $response.body.current_page >= $response.body.last_page }}",
+              "requestInterval": 4000
+            }
+          }
+        }
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.5,
       "position": [
-        272,
-        -144
+        -64,
+        -64
       ],
-      "id": "0408c3db-aa86-4caf-a7fc-ede2e5fe9b19",
-      "name": "Get message metadata",
+      "id": "318a25db-6bb3-4975-b34a-b9640ab2f79c",
+      "name": "Get active KeyCRM users",
       "credentials": {
-        "gmailOAuth2": {
-          "id": "FJ3qlbs3RFMHmomW",
-          "name": "Gmail account"
+        "httpBearerAuth": {
+          "id": "TGZJjiNcly8kxlkS",
+          "name": "KeyCRM MCP"
         }
       },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
       "onError": "continueErrorOutput"
     },
     {
       "parameters": {
-        "jsCode": "const message = items[0]?.json ?? {};\nconst input = $('Validate input').first().json;\n\nconst filenameHint =\n  typeof input.filename === 'string'\n    ? input.filename.trim().toLowerCase()\n    : '';\n\nfunction headerValue(part, headerName) {\n  const headers = Array.isArray(part?.headers) ? part.headers : [];\n  const match = headers.find(\n    h => typeof h?.name === 'string' &&\n      h.name.toLowerCase() === headerName.toLowerCase()\n  );\n\n  return typeof match?.value === 'string'\n    ? match.value\n    : '';\n}\n\nfunction collectAttachments(part, result = []) {\n  if (!part || typeof part !== 'object') {\n    return result;\n  }\n\n  const attachmentId =\n    typeof part.body?.attachmentId === 'string'\n      ? part.body.attachmentId.trim()\n      : '';\n\n  if (attachmentId) {\n    result.push({\n      attachment_id: attachmentId,\n      filename:\n        typeof part.filename === 'string' && part.filename.trim()\n          ? part.filename.trim()\n          : null,\n      mime_type:\n        typeof part.mimeType === 'string' && part.mimeType.trim()\n          ? part.mimeType.trim()\n          : null,\n      size:\n        Number.isInteger(part.body?.size)\n          ? part.body.size\n          : null,\n      disposition: headerValue(part, 'Content-Disposition')\n    });\n  }\n\n  const children = Array.isArray(part.parts)\n    ? part.parts\n    : [];\n\n  for (const child of children) {\n    collectAttachments(child, result);\n  }\n\n  return result;\n}\n\nconst allAttachments = collectAttachments(message.payload);\n\nconst explicitAttachments = allAttachments.filter(\n  item => item.disposition.toLowerCase().startsWith('attachment')\n);\n\nconst namedAttachments = allAttachments.filter(\n  item => typeof item.filename === 'string' && item.filename.length > 0\n);\n\nconst candidates =\n  explicitAttachments.length > 0\n    ? explicitAttachments\n    : namedAttachments.length > 0\n      ? namedAttachments\n      : allAttachments;\n\nlet selected = null;\nlet selectionStatus = 'not_found';\n\nif (filenameHint) {\n  const exactMatches = candidates.filter(\n    item => item.filename?.toLowerCase() === filenameHint\n  );\n\n  if (exactMatches.length === 1) {\n    selected = exactMatches[0];\n    selectionStatus = 'found';\n  } else if (exactMatches.length > 1) {\n    selectionStatus = 'ambiguous';\n  } else {\n    const partialMatches = candidates.filter(\n      item => item.filename?.toLowerCase().includes(filenameHint)\n    );\n\n    if (partialMatches.length === 1) {\n      selected = partialMatches[0];\n      selectionStatus = 'found';\n    } else if (partialMatches.length > 1) {\n      selectionStatus = 'ambiguous';\n    }\n  }\n} else if (candidates.length === 1) {\n  selected = candidates[0];\n  selectionStatus = 'found';\n} else if (candidates.length > 1) {\n  selectionStatus = 'ambiguous';\n}\n\nreturn [\n  {\n    json: {\n      message_id: input.message_id,\n      requested_filename: input.filename || null,\n      selection_status: selectionStatus,\n      attachment_found: selectionStatus === 'found',\n      attachment_id: selected?.attachment_id || null,\n      filename: selected?.filename || null,\n      mime_type: selected?.mime_type || null,\n      size: selected?.size ?? null,\n      available_attachments: candidates.map(item => ({\n        filename: item.filename,\n        mime_type: item.mime_type,\n        size: item.size\n      }))\n    }\n  }\n];"
+        "jsCode": "const query = $('Validate input').first().json.manager;\n\nfunction translit(value) {\n  const map = {\n    'а':'a','б':'b','в':'v','г':'g','ґ':'g','д':'d','е':'e','ё':'yo','є':'ye','ж':'zh','з':'z','и':'i','і':'i','ї':'yi','й':'i',\n    'к':'k','л':'l','м':'m','н':'n','о':'o','п':'p','р':'r','с':'s','т':'t','у':'u','ф':'f','х':'kh','ц':'ts','ч':'ch','ш':'sh','щ':'shch',\n    'ъ':'','ы':'y','ь':'','э':'e','ю':'yu','я':'ya'\n  };\n  return String(value ?? '').toLowerCase().split('').map(ch => map[ch] ?? ch).join('');\n}\n\nfunction normalize(value) {\n  return translit(value)\n    .normalize('NFD')\n    .replace(/[\\u0300-\\u036f]/g, '')\n    .replace(/[^a-z0-9]+/g, ' ')\n    .trim()\n    .replace(/\\s+/g, ' ');\n}\n\nfunction levenshtein(a, b) {\n  if (a === b) return 0;\n  if (!a.length) return b.length;\n  if (!b.length) return a.length;\n  const prev = Array.from({ length: b.length + 1 }, (_, i) => i);\n  for (let i = 1; i <= a.length; i++) {\n    const cur = [i];\n    for (let j = 1; j <= b.length; j++) {\n      const cost = a[i - 1] === b[j - 1] ? 0 : 1;\n      cur[j] = Math.min(cur[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost);\n    }\n    for (let j = 0; j <= b.length; j++) prev[j] = cur[j];\n  }\n  return prev[b.length];\n}\n\nfunction similarity(a, b) {\n  const maxLen = Math.max(a.length, b.length);\n  return maxLen === 0 ? 1 : 1 - levenshtein(a, b) / maxLen;\n}\n\nfunction tokenScore(a, b) {\n  const aa = a.split(' ').filter(Boolean);\n  const bb = b.split(' ').filter(Boolean);\n  if (!aa.length || !bb.length) return 0;\n  const oneWay = aa.reduce((sum, token) => sum + Math.max(...bb.map(x => similarity(token, x))), 0) / aa.length;\n  const reverse = bb.reduce((sum, token) => sum + Math.max(...aa.map(x => similarity(token, x))), 0) / bb.length;\n  return Math.min(oneWay, reverse);\n}\n\nconst users = [];\nfor (const item of items) {\n  const page = item.json ?? {};\n  if (Array.isArray(page.data)) users.push(...page.data);\n}\n\nconst q = normalize(query);\nconst ranked = users\n  .map(user => {\n    const name = String(user.full_name ?? `${user.first_name ?? ''} ${user.last_name ?? ''}`).trim();\n    const n = normalize(name);\n    const sortedQ = q.split(' ').sort().join(' ');\n    const sortedN = n.split(' ').sort().join(' ');\n    let score = Math.max(similarity(q, n), similarity(sortedQ, sortedN), tokenScore(q, n));\n    if (q === n) score = 1;\n    else if (q.length >= 4 && (n.includes(q) || q.includes(n))) score = Math.max(score, 0.96);\n    return { user, name, score };\n  })\n  .sort((a, b) => b.score - a.score || Number(a.user.id) - Number(b.user.id));\n\nconst best = ranked[0];\nconst second = ranked[1];\nif (!best || best.score < 0.78) {\n  return [{ json: { manager_resolved:false, error:{ code:'NOT_FOUND', message:'KeyCRM manager not found' } } }];\n}\nif (second && best.score < 0.97 && (best.score - second.score) < 0.06) {\n  return [{ json: { manager_resolved:false, error:{ code:'AMBIGUOUS_MANAGER', message:'Manager name is ambiguous; provide a more specific name' } } }];\n}\n\nreturn [{ json: {\n  manager_resolved:true,\n  manager:{ id:Number(best.user.id), full_name:best.name, status:best.user.status ?? null },\n  match_score:Number(best.score.toFixed(4))\n} }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        496,
-        -240
+        160,
+        -64
       ],
-      "id": "2e6f68f7-f5af-459a-ac07-e68f620ec10f",
-      "name": "Find attachment"
+      "id": "a23e2042-a6c4-45be-b442-4912cd620dca",
+      "name": "Resolve manager"
     },
     {
       "parameters": {
@@ -268,8 +305,8 @@
           },
           "conditions": [
             {
-              "id": "2b0cbf62-8f82-4285-aa72-05d2509a18c9",
-              "leftValue": "={{ $json.attachment_found }}",
+              "id": "7a3d9559-6c63-4bb8-a51e-59fecec1dc24",
+              "leftValue": "={{ $json.manager_resolved }}",
               "rightValue": "",
               "operator": {
                 "type": "boolean",
@@ -285,60 +322,90 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        720,
-        -240
+        384,
+        -64
       ],
-      "id": "73a95b1f-91c6-4226-b491-84fd50531550",
-      "name": "Attachment found?"
+      "id": "4650060c-5d1b-4494-a19c-eee2ddbfb833",
+      "name": "Is manager resolved?"
     },
     {
       "parameters": {
-        "jsCode": "const selection = $('Find attachment').first().json;\nconst ambiguous = selection.selection_status === 'ambiguous';\n\nreturn [\n  {\n    json: {\n      success: false,\n      error: {\n        code: ambiguous ? 'AMBIGUOUS_ATTACHMENT' : 'NOT_FOUND',\n        message: ambiguous\n          ? 'Multiple attachments found; retry with filename'\n          : 'No matching attachment found in message'\n      },\n      data: {\n        available_attachments: selection.available_attachments ?? []\n      },\n      meta: {\n        tool: 'get_email_attachment',\n        count: 0\n      }\n    }\n  }\n];"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        944,
-        -144
-      ],
-      "id": "eea55028-f654-4f4f-8884-ec6f73ed524a",
-      "name": "Format not found error"
-    },
-    {
-      "parameters": {
-        "url": "={{   'https://gmail.googleapis.com/gmail/v1/users/me/messages/'   + $('Find attachment').item.json.message_id   + '/attachments/'   + $('Find attachment').item.json.attachment_id }}",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "gmailOAuth2",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.5,
-      "position": [
-        944,
-        -336
-      ],
-      "id": "365ebee7-d80b-4e34-b64a-3d172e83b740",
-      "name": "Get attachment data",
-      "credentials": {
-        "gmailOAuth2": {
-          "id": "FJ3qlbs3RFMHmomW",
-          "name": "Gmail account"
+        "operation": "executeQuery",
+        "query": "WITH f AS (SELECT c.* FROM public.keycrm_pipeline_cards c JOIN public.keycrm_pipelines p ON p.pipeline_id=c.pipeline_id AND p.lead_type='lead' WHERE c.manager_id=$1::bigint AND c.created_at >= $2::timestamptz AND c.created_at < $3::timestamptz) SELECT count(*)::int AS total_leads_raw,count(*) FILTER (WHERE status_alias='dublikaty')::int AS duplicate_leads,count(*) FILTER (WHERE status_alias IS DISTINCT FROM 'dublikaty')::int AS total_leads_excluding_duplicates,count(*) FILTER (WHERE status_alias='successful')::int AS successful_sales,count(*) FILTER (WHERE COALESCE(status_is_final,false)=true AND status_alias NOT IN ('successful','dublikaty'))::int AS closed_unsuccessful_excluding_duplicates,count(*) FILTER (WHERE COALESCE(status_is_final,false)=false AND status_alias IS DISTINCT FROM 'dublikaty')::int AS open_leads_excluding_duplicates,COALESCE(sum(payments_total) FILTER (WHERE status_alias='successful'),0)::numeric AS successful_payments_total,COALESCE(sum(products_total) FILTER (WHERE status_alias='successful'),0)::numeric AS successful_products_total,CASE WHEN count(*)=0 THEN 0 ELSE round(100.0*count(*) FILTER (WHERE status_alias='successful')/count(*),2) END AS conversion_percent_raw,CASE WHEN count(*) FILTER (WHERE status_alias IS DISTINCT FROM 'dublikaty')=0 THEN 0 ELSE round(100.0*count(*) FILTER (WHERE status_alias='successful')/(count(*) FILTER (WHERE status_alias IS DISTINCT FROM 'dublikaty')),2) END AS conversion_percent_excluding_duplicates FROM f;",
+        "options": {
+          "queryReplacement": "={{ [ $('Resolve manager').first().json.manager.id, $('Validate input').first().json.start_iso, $('Validate input').first().json.end_iso ] }}"
         }
       },
-      "onError": "continueErrorOutput"
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        608,
+        -160
+      ],
+      "id": "9f0cf715-e732-4be3-93e2-5e67594dd5ce",
+      "name": "Get manager sales stats",
+      "onError": "continueErrorOutput",
+      "credentials": {
+        "postgres": {
+          "id": "Zj9PZx7iF6uK469i",
+          "name": "mcp_read"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
     },
     {
       "parameters": {
-        "jsCode": "const attachment = items[0]?.json ?? {};\nconst meta = $('Find attachment').first().json;\n\nconst base64Url =\n  typeof attachment.data === 'string'\n    ? attachment.data\n    : '';\n\nconst contentBase64 = base64Url\n  .replace(/-/g, '+')\n  .replace(/_/g, '/')\n  .padEnd(Math.ceil(base64Url.length / 4) * 4, '=');\n\nreturn [\n  {\n    json: {\n      success: true,\n      data: {\n        filename: meta.filename,\n        mime_type: meta.mime_type,\n        size: attachment.size ?? meta.size ?? null,\n        content_base64: contentBase64\n      },\n      meta: {\n        tool: 'get_email_attachment',\n        count: 1\n      }\n    }\n  }\n];"
+        "jsCode": "const m=$('Resolve manager').first().json.manager,i=$('Validate input').first().json,r=items[0]?.json??{}; return [{json:{success:true,data:{manager:m,start:i.start_iso,end:i.end_iso,total_leads_raw:Number(r.total_leads_raw||0),duplicate_leads:Number(r.duplicate_leads||0),total_leads_excluding_duplicates:Number(r.total_leads_excluding_duplicates||0),successful_sales:Number(r.successful_sales||0),closed_unsuccessful_excluding_duplicates:Number(r.closed_unsuccessful_excluding_duplicates||0),open_leads_excluding_duplicates:Number(r.open_leads_excluding_duplicates||0),conversion_percent_raw:Number(r.conversion_percent_raw||0),conversion_percent_excluding_duplicates:Number(r.conversion_percent_excluding_duplicates||0),successful_payments_total:Number(r.successful_payments_total||0),successful_products_total:Number(r.successful_products_total||0),duplicate_rule:\"KeyCRM status_alias = 'dublikaty'\",metric_basis:'Pipeline cards created in the requested period, using current manager assignment and current card status.'},meta:{tool:'get_manager_sales_stats',count:Number(r.total_leads_raw||0)}}}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1168,
-        -432
+        832,
+        -208
       ],
-      "id": "947155d1-ab42-4e4e-a595-ad617645b886",
-      "name": "Format MCP response"
+      "id": "a4ce279d-40da-40c4-94d8-953e57850c2d",
+      "name": "Format sales stats"
+    },
+    {
+      "parameters": {
+        "jsCode": "const e = items[0]?.json?.error ?? {}; return [{ json:{ success:false, error:{ code:e.code || 'NOT_FOUND', message:e.message || 'KeyCRM manager not found' }, meta:{ tool:'get_manager_sales_stats', count:0 } } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        608,
+        32
+      ],
+      "id": "27ea6719-094c-4edc-8232-cf3072769eab",
+      "name": "Format manager resolution error"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json:{ success:false, error:{ code:'UPSTREAM_ERROR', message:'KeyCRM users request failed' }, meta:{ tool:'get_manager_sales_stats', count:0 } } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        160,
+        176
+      ],
+      "id": "79f35ec6-512b-4d67-9494-c38e9940ac0c",
+      "name": "Format KeyCRM error"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json:{success:false,error:{code:'UPSTREAM_ERROR',message:'Analytics database query failed'},meta:{tool:'get_manager_sales_stats',count:0}}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        832,
+        32
+      ],
+      "id": "0311c5eb-31c0-478f-bd8e-77e845945030",
+      "name": "Format database error"
     },
     {
       "parameters": {
@@ -353,8 +420,8 @@
           "mappingMode": "defineBelow",
           "value": {
             "action": "finish",
-            "audit_id": "={{ $('Audit start').item.json.audit_id }}",
             "status": "succeeded",
+            "audit_id": "={{ $('Audit start').item.json.audit_id }}",
             "duration_ms": "={{ Date.now() - new Date($('Audit start').item.json.started_at).getTime() }}"
           },
           "matchingColumns": [],
@@ -366,7 +433,8 @@
               "defaultMatch": false,
               "display": true,
               "canBeUsedToMatch": true,
-              "type": "string"
+              "type": "string",
+              "removed": false
             },
             {
               "id": "audit_id",
@@ -375,7 +443,8 @@
               "defaultMatch": false,
               "display": true,
               "canBeUsedToMatch": true,
-              "type": "string"
+              "type": "string",
+              "removed": false
             },
             {
               "id": "request_id",
@@ -384,7 +453,8 @@
               "defaultMatch": false,
               "display": true,
               "canBeUsedToMatch": true,
-              "type": "string"
+              "type": "string",
+              "removed": true
             },
             {
               "id": "tool_name",
@@ -393,7 +463,8 @@
               "defaultMatch": false,
               "display": true,
               "canBeUsedToMatch": true,
-              "type": "string"
+              "type": "string",
+              "removed": true
             },
             {
               "id": "arguments_json",
@@ -402,7 +473,8 @@
               "defaultMatch": false,
               "display": true,
               "canBeUsedToMatch": true,
-              "type": "object"
+              "type": "object",
+              "removed": true
             },
             {
               "id": "status",
@@ -411,7 +483,8 @@
               "defaultMatch": false,
               "display": true,
               "canBeUsedToMatch": true,
-              "type": "string"
+              "type": "string",
+              "removed": false
             },
             {
               "id": "error_code",
@@ -420,7 +493,8 @@
               "defaultMatch": false,
               "display": true,
               "canBeUsedToMatch": true,
-              "type": "string"
+              "type": "string",
+              "removed": false
             },
             {
               "id": "error_message",
@@ -429,7 +503,8 @@
               "defaultMatch": false,
               "display": true,
               "canBeUsedToMatch": true,
-              "type": "string"
+              "type": "string",
+              "removed": false
             },
             {
               "id": "duration_ms",
@@ -437,7 +512,8 @@
               "required": false,
               "defaultMatch": false,
               "display": true,
-              "canBeUsedToMatch": true
+              "canBeUsedToMatch": true,
+              "removed": false
             },
             {
               "id": "client_name",
@@ -446,7 +522,8 @@
               "defaultMatch": false,
               "display": true,
               "canBeUsedToMatch": true,
-              "type": "string"
+              "type": "string",
+              "removed": true
             }
           ],
           "attemptToConvertTypes": false,
@@ -457,23 +534,23 @@
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.3,
       "position": [
-        1392,
-        -432
+        1056,
+        -208
       ],
-      "id": "929da2c6-4c21-4b24-9666-a17457cb5444",
+      "id": "5ac13a84-a4c2-4a7c-8149-a1b855b8a19b",
       "name": "Audit success"
     },
     {
       "parameters": {
-        "jsCode": "return [\n  {\n    json: $('Format MCP response').first().json\n  }\n];"
+        "jsCode": "return [{json:$('Format sales stats').first().json}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1616,
-        -432
+        1280,
+        -208
       ],
-      "id": "30006d13-07ee-4a49-9bb5-c3aeb16e9bec",
+      "id": "c353178d-cd05-4ff1-bd52-706149b4f5b1",
       "name": "Return MCP response"
     },
     {
@@ -504,157 +581,6 @@
               "defaultMatch": false,
               "display": true,
               "canBeUsedToMatch": true,
-              "type": "string"
-            },
-            {
-              "id": "audit_id",
-              "displayName": "audit_id",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "string"
-            },
-            {
-              "id": "request_id",
-              "displayName": "request_id",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "string"
-            },
-            {
-              "id": "tool_name",
-              "displayName": "tool_name",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "string"
-            },
-            {
-              "id": "arguments_json",
-              "displayName": "arguments_json",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "object"
-            },
-            {
-              "id": "status",
-              "displayName": "status",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "string"
-            },
-            {
-              "id": "error_code",
-              "displayName": "error_code",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "string"
-            },
-            {
-              "id": "error_message",
-              "displayName": "error_message",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "string"
-            },
-            {
-              "id": "duration_ms",
-              "displayName": "duration_ms",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "client_name",
-              "displayName": "client_name",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "string"
-            }
-          ],
-          "attemptToConvertTypes": false,
-          "convertFieldsToString": true
-        },
-        "options": {}
-      },
-      "type": "n8n-nodes-base.executeWorkflow",
-      "typeVersion": 1.3,
-      "position": [
-        1168,
-        -144
-      ],
-      "id": "81151287-4062-4960-a309-bc438fba6521",
-      "name": "Audit failed"
-    },
-    {
-      "parameters": {
-        "jsCode": "return [\n  {\n    json: $('Format not found error').first().json\n  }\n];"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        1392,
-        -144
-      ],
-      "id": "ee7dcc3d-f31c-4435-baaf-9a69268c29ed",
-      "name": "Return MCP error"
-    },
-    {
-      "parameters": {
-        "jsCode": "return [\n  {\n    json: {\n      success: false,\n      error: {\n        code: 'UPSTREAM_ERROR',\n        message: 'Gmail request failed'\n      },\n      meta: {\n        tool: 'get_email_attachment',\n        count: 0\n      }\n    }\n  }\n];"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        656,
-        64
-      ],
-      "id": "f1d32d55-77ea-4747-aeec-4cbbdfcd3de7",
-      "name": "Format Gmail error"
-    },
-    {
-      "parameters": {
-        "workflowId": {
-          "__rl": true,
-          "value": "OALvijdov0sXpsTO",
-          "mode": "list",
-          "cachedResultUrl": "/workflow/OALvijdov0sXpsTO",
-          "cachedResultName": "MCP — Audit Tool Call"
-        },
-        "workflowInputs": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "action": "finish",
-            "audit_id": "={{ $('Audit start').item.json.audit_id }}",
-            "status": "failed",
-            "error_code": "={{ $json.error.code }}",
-            "error_message": "={{ $json.error.message }}",
-            "duration_ms": "={{ Date.now() - new Date($('Audit start').item.json.started_at).getTime() }}"
-          },
-          "matchingColumns": [],
-          "schema": [
-            {
-              "id": "action",
-              "displayName": "action",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
               "type": "string",
               "removed": false
             },
@@ -676,7 +602,7 @@
               "display": true,
               "canBeUsedToMatch": true,
               "type": "string",
-              "removed": false
+              "removed": true
             },
             {
               "id": "tool_name",
@@ -686,7 +612,7 @@
               "display": true,
               "canBeUsedToMatch": true,
               "type": "string",
-              "removed": false
+              "removed": true
             },
             {
               "id": "arguments_json",
@@ -696,7 +622,7 @@
               "display": true,
               "canBeUsedToMatch": true,
               "type": "object",
-              "removed": false
+              "removed": true
             },
             {
               "id": "status",
@@ -745,7 +671,7 @@
               "display": true,
               "canBeUsedToMatch": true,
               "type": "string",
-              "removed": false
+              "removed": true
             }
           ],
           "attemptToConvertTypes": false,
@@ -756,24 +682,24 @@
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.3,
       "position": [
-        880,
+        1056,
         64
       ],
-      "id": "0914a6bc-8d9c-4b91-baa7-072a34ded472",
-      "name": "Call 'MCP — Audit Tool Call'"
+      "id": "f6c2b13f-c2be-4bec-8a5b-1571efe0254f",
+      "name": "Audit failed"
     },
     {
       "parameters": {
-        "jsCode": "return [\n  {\n    json: $('Format Gmail error').first().json\n  }\n];"
+        "jsCode": "const sources=['Format manager resolution error','Format KeyCRM error','Format database error']; for (const name of sources){try{const r=$(name).first().json;if(r?.success===false)return [{json:r}];}catch(e){}} return [{json:{success:false,error:{code:'UPSTREAM_ERROR',message:'Manager sales analytics request failed'},meta:{tool:'get_manager_sales_stats',count:0}}}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1104,
+        1280,
         64
       ],
-      "id": "bed3a9f7-ad77-4dee-bc42-4b985a4b9aa6",
-      "name": "Return Gmail error"
+      "id": "15e9cd82-12c7-4ac2-80c3-6d213fe7228e",
+      "name": "Return MCP error"
     }
   ],
   "connections": {
@@ -821,79 +747,79 @@
       "main": [
         [
           {
-            "node": "Get message metadata",
+            "node": "Get active KeyCRM users",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Get message metadata": {
+    "Get active KeyCRM users": {
       "main": [
         [
           {
-            "node": "Find attachment",
+            "node": "Resolve manager",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Format Gmail error",
+            "node": "Format KeyCRM error",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Find attachment": {
+    "Resolve manager": {
       "main": [
         [
           {
-            "node": "Attachment found?",
+            "node": "Is manager resolved?",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Attachment found?": {
+    "Is manager resolved?": {
       "main": [
         [
           {
-            "node": "Get attachment data",
+            "node": "Get manager sales stats",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Format not found error",
+            "node": "Format manager resolution error",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Get attachment data": {
+    "Get manager sales stats": {
       "main": [
         [
           {
-            "node": "Format MCP response",
+            "node": "Format sales stats",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Format Gmail error",
+            "node": "Format database error",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Format MCP response": {
+    "Format sales stats": {
       "main": [
         [
           {
@@ -915,7 +841,29 @@
         ]
       ]
     },
-    "Format not found error": {
+    "Format manager resolution error": {
+      "main": [
+        [
+          {
+            "node": "Audit failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format KeyCRM error": {
+      "main": [
+        [
+          {
+            "node": "Audit failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format database error": {
       "main": [
         [
           {
@@ -936,76 +884,44 @@
           }
         ]
       ]
-    },
-    "Format Gmail error": {
-      "main": [
-        [
-          {
-            "node": "Call 'MCP — Audit Tool Call'",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Call 'MCP — Audit Tool Call'": {
-      "main": [
-        [
-          {
-            "node": "Return Gmail error",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
     }
   },
   "settings": {
     "executionOrder": "v1",
-    "binaryMode": "separate",
-    "availableInMCP": false
+    "binaryMode": "separate"
   },
   "staticData": null,
   "meta": null,
   "nodeGroups": [],
-  "pinData": {
-    "When Executed by Another Workflow": [
-      {
-        "json": {
-          "message_id": "1a06ee890111f46f",
-          "filename": ""
-        }
-      }
-    ]
-  },
-  "versionId": "61a55d52-8d8a-45ab-bdc8-50e01de9cabc",
+  "pinData": null,
+  "versionId": "01ad9297-b13d-4a89-8cf5-ba92cf96ecc1",
   "activeVersionId": null,
-  "versionCounter": 108,
+  "versionCounter": 1,
   "triggerCount": 0,
   "sourceWorkflowId": null,
   "tags": [],
   "shared": [
     {
-      "updatedAt": "2026-09-13T21:39:24.902Z",
-      "createdAt": "2026-09-13T21:39:24.902Z",
+      "updatedAt": "2026-09-13T19:44:59.531Z",
+      "createdAt": "2026-09-13T19:44:59.531Z",
       "role": "workflow:owner",
-      "workflowId": "zAfGZsJszUKu2NIp",
-      "projectId": "GA8fFOeyPJUAti7Y",
+      "workflowId": "KcrmMgrSalesStatsA1",
+      "projectId": "WPiLi1dhTYs2ov71",
       "project": {
-        "updatedAt": "2026-09-13T21:36:19.262Z",
-        "createdAt": "2026-09-13T21:36:19.262Z",
-        "id": "GA8fFOeyPJUAti7Y",
-        "name": "Unnamed Project",
+        "updatedAt": "2026-09-13T19:09:09.493Z",
+        "createdAt": "2026-09-11T20:16:40.332Z",
+        "id": "WPiLi1dhTYs2ov71",
+        "name": "Vitalii Pokhyl <pokhylvitalii@gmail.com>",
         "type": "personal",
         "icon": null,
         "description": null,
         "customTelemetryTags": [],
-        "creatorId": "2ac7bdf8-8dde-4ba9-acd7-3640352a1b47"
+        "creatorId": "4a00a311-544e-4270-a735-25e36206388c"
       }
     }
   ],
   "versionMetadata": {
-    "name": "Version 341b46c9",
-    "description": ""
+    "name": null,
+    "description": null
   }
 }

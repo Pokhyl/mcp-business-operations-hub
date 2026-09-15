@@ -1,0 +1,263 @@
+{
+  "updatedAt": "2026-09-13T19:45:19.502Z",
+  "createdAt": "2026-09-13T19:45:19.502Z",
+  "id": "KcrmPipelineIncrementalA1",
+  "name": "ADMIN — KeyCRM Pipeline Card Index Incremental Sync",
+  "description": null,
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -720,
+        -80
+      ],
+      "id": "306253a6-82fd-40f4-add9-40beb8713271",
+      "name": "Manual Trigger"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        -720,
+        80
+      ],
+      "id": "9a5fbf59-9def-4e6e-9d75-5337d7c12eac",
+      "name": "Schedule every 15 minutes"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH state AS (\n  SELECT last_successful_sync_at FROM public.keycrm_sync_state WHERE sync_name='pipeline_cards_incremental'\n)\nSELECT COALESCE((SELECT last_successful_sync_at FROM state), now() - interval '1 hour') - interval '2 minutes' AS from_ts, now() AS to_ts;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        -464,
+        0
+      ],
+      "id": "94f7ad8f-1936-43a8-99ad-33c6f6c18af2",
+      "name": "Load sync window",
+      "credentials": {
+        "postgres": {
+          "id": "AdVJ2zREIvjZqGH5",
+          "name": "Application PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://openapi.keycrm.app/v1/pipelines/cards",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "limit",
+              "value": "50"
+            },
+            {
+              "name": "include",
+              "value": "status"
+            },
+            {
+              "name": "filter[updated_between]",
+              "value": "={{ new Date($('Load sync window').first().json.from_ts).toISOString() + ',' + new Date($('Load sync window').first().json.to_ts).toISOString() }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "pagination": {
+            "pagination": {
+              "paginationMode": "updateAParameterInEachRequest",
+              "parameters": {
+                "parameters": [
+                  {
+                    "type": "qs",
+                    "name": "page",
+                    "value": "={{ $pageCount + 1 }}"
+                  }
+                ]
+              },
+              "paginationCompleteWhen": "other",
+              "completeExpression": "={{ $response.body.current_page >= $response.body.last_page }}",
+              "requestInterval": 4000
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -208,
+        0
+      ],
+      "id": "a9ab098a-fa4f-4bf0-aa1c-7bbf3addc7ea",
+      "name": "Fetch changed cards",
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "TGZJjiNcly8kxlkS",
+          "name": "KeyCRM MCP"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "const window = $('Load sync window').first().json;\nconst cards = new Map();\nfor (const item of items) {\n  const pageCards = Array.isArray(item.json?.data) ? item.json.data : [];\n  for (const card of pageCards) {\n    const cardId = Number(card.id);\n    const pipelineId = Number(card.pipeline_id);\n    if (!Number.isInteger(cardId) || cardId < 1 || !Number.isInteger(pipelineId) || pipelineId < 1) continue;\n    cards.set(cardId, {\n      card_id: cardId,\n      pipeline_id: pipelineId,\n      source_id: Number.isInteger(Number(card.source_id)) ? Number(card.source_id) : null,\n      manager_id: Number.isInteger(Number(card.manager_id)) ? Number(card.manager_id) : null,\n      status_id: Number.isInteger(Number(card.status_id)) ? Number(card.status_id) : null,\n      status_alias: typeof card.status?.alias === 'string' ? card.status.alias : null,\n      status_title: typeof card.status?.title === 'string' ? card.status.title : null,\n      status_is_final: typeof card.status?.is_final === 'boolean' ? card.status.is_final : null,\n      is_finished: typeof card.is_finished === 'boolean' ? card.is_finished : null,\n      closed_from: Number.isInteger(Number(card.closed_from)) ? Number(card.closed_from) : null,\n      created_at: card.created_at || null,\n      updated_at: card.updated_at || null,\n      status_changed_at: card.status_changed_at || null,\n      payments_total: Number.isFinite(Number(card.payments_total)) ? Number(card.payments_total) : 0,\n      products_total: Number.isFinite(Number(card.products_total)) ? Number(card.products_total) : 0,\n      utm_source: typeof card.utm_source === 'string' ? card.utm_source : null,\n      utm_medium: typeof card.utm_medium === 'string' ? card.utm_medium : null,\n      utm_campaign: typeof card.utm_campaign === 'string' ? card.utm_campaign : null\n    });\n  }\n}\nreturn [{json:{from_ts:window.from_ts,to_ts:window.to_ts,count:cards.size,cards:[...cards.values()]}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        48,
+        0
+      ],
+      "id": "f588fabd-c637-496b-90d9-b08ec16cbf48",
+      "name": "Build card incremental payload"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH input AS (\n  SELECT $1::jsonb AS cards, $2::timestamptz AS checkpoint\n),\nsource_rows AS (\n  SELECT\n    (card->>'card_id')::bigint AS card_id,\n    (card->>'pipeline_id')::bigint AS pipeline_id,\n    NULLIF(card->>'source_id','')::bigint AS source_id,\n    NULLIF(card->>'manager_id','')::bigint AS manager_id,\n    NULLIF(card->>'status_id','')::bigint AS status_id,\n    NULLIF(card->>'status_alias','') AS status_alias,\n    NULLIF(card->>'status_title','') AS status_title,\n    NULLIF(card->>'status_is_final','')::boolean AS status_is_final,\n    NULLIF(card->>'is_finished','')::boolean AS is_finished,\n    NULLIF(card->>'closed_from','')::bigint AS closed_from,\n    NULLIF(card->>'created_at','')::timestamptz AS created_at,\n    NULLIF(card->>'updated_at','')::timestamptz AS updated_at,\n    NULLIF(card->>'status_changed_at','')::timestamptz AS status_changed_at,\n    COALESCE(NULLIF(card->>'payments_total','')::numeric,0) AS payments_total,\n    COALESCE(NULLIF(card->>'products_total','')::numeric,0) AS products_total,\n    NULLIF(card->>'utm_source','') AS utm_source,\n    NULLIF(card->>'utm_medium','') AS utm_medium,\n    NULLIF(card->>'utm_campaign','') AS utm_campaign,\n    input.checkpoint AS synced_at\n  FROM input CROSS JOIN LATERAL jsonb_array_elements(input.cards) AS card\n),\nassignment_events AS (\n  INSERT INTO public.keycrm_pipeline_assignment_events(\n    card_id,changed_at,old_manager_id,new_manager_id,old_source_id,new_source_id,observed_at\n  )\n  SELECT\n    s.card_id,\n    COALESCE(s.updated_at, input.checkpoint),\n    old.manager_id,\n    s.manager_id,\n    old.source_id,\n    s.source_id,\n    now()\n  FROM source_rows s\n  JOIN public.keycrm_pipeline_cards old ON old.card_id=s.card_id\n  CROSS JOIN input\n  WHERE (old.manager_id IS DISTINCT FROM s.manager_id OR old.source_id IS DISTINCT FROM s.source_id)\n    AND COALESCE(s.updated_at,input.checkpoint) >= COALESCE((SELECT tracking_started_at FROM public.keycrm_pipeline_tracking_meta WHERE id=1), input.checkpoint)\n  ON CONFLICT DO NOTHING\n  RETURNING event_id\n),\nupserted AS (\n  INSERT INTO public.keycrm_pipeline_cards(\n    card_id,pipeline_id,source_id,manager_id,status_id,status_alias,status_title,status_is_final,is_finished,closed_from,\n    created_at,updated_at,status_changed_at,payments_total,products_total,utm_source,utm_medium,utm_campaign,synced_at\n  )\n  SELECT card_id,pipeline_id,source_id,manager_id,status_id,status_alias,status_title,status_is_final,is_finished,closed_from,\n    created_at,updated_at,status_changed_at,payments_total,products_total,utm_source,utm_medium,utm_campaign,synced_at\n  FROM source_rows\n  ON CONFLICT(card_id) DO UPDATE SET\n    pipeline_id=EXCLUDED.pipeline_id,source_id=EXCLUDED.source_id,manager_id=EXCLUDED.manager_id,status_id=EXCLUDED.status_id,\n    status_alias=EXCLUDED.status_alias,status_title=EXCLUDED.status_title,status_is_final=EXCLUDED.status_is_final,is_finished=EXCLUDED.is_finished,\n    closed_from=EXCLUDED.closed_from,created_at=EXCLUDED.created_at,updated_at=EXCLUDED.updated_at,status_changed_at=EXCLUDED.status_changed_at,\n    payments_total=EXCLUDED.payments_total,products_total=EXCLUDED.products_total,utm_source=EXCLUDED.utm_source,utm_medium=EXCLUDED.utm_medium,\n    utm_campaign=EXCLUDED.utm_campaign,synced_at=EXCLUDED.synced_at\n  RETURNING card_id\n),\nstate_update AS (\n  INSERT INTO public.keycrm_sync_state(sync_name,last_successful_sync_at,last_count,updated_at)\n  SELECT 'pipeline_cards_incremental', input.checkpoint, (SELECT count(*)::int FROM upserted), now() FROM input\n  ON CONFLICT(sync_name) DO UPDATE SET last_successful_sync_at=EXCLUDED.last_successful_sync_at,last_count=EXCLUDED.last_count,updated_at=EXCLUDED.updated_at\n  RETURNING last_successful_sync_at,last_count,updated_at\n)\nSELECT last_successful_sync_at,last_count,(SELECT count(*)::int FROM assignment_events) AS assignment_events_created,updated_at FROM state_update;",
+        "options": {
+          "queryReplacement": "={{ [ JSON.stringify($json.cards), $json.to_ts ] }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        304,
+        0
+      ],
+      "id": "2424ed11-7e27-4ad9-bc16-ade9c4254476",
+      "name": "Apply card changes and checkpoint",
+      "credentials": {
+        "postgres": {
+          "id": "AdVJ2zREIvjZqGH5",
+          "name": "Application PostgreSQL"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Load sync window",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule every 15 minutes": {
+      "main": [
+        [
+          {
+            "node": "Load sync window",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load sync window": {
+      "main": [
+        [
+          {
+            "node": "Fetch changed cards",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch changed cards": {
+      "main": [
+        [
+          {
+            "node": "Build card incremental payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build card incremental payload": {
+      "main": [
+        [
+          {
+            "node": "Apply card changes and checkpoint",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Warsaw"
+  },
+  "staticData": null,
+  "meta": null,
+  "nodeGroups": [],
+  "pinData": null,
+  "versionId": "6cf1366c-bf57-41e1-b2ea-6c0ded5f4ea9",
+  "activeVersionId": null,
+  "versionCounter": 1,
+  "triggerCount": 0,
+  "sourceWorkflowId": null,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-09-13T19:45:19.502Z",
+      "createdAt": "2026-09-13T19:45:19.502Z",
+      "role": "workflow:owner",
+      "workflowId": "KcrmPipelineIncrementalA1",
+      "projectId": "WPiLi1dhTYs2ov71",
+      "project": {
+        "updatedAt": "2026-09-13T19:09:09.493Z",
+        "createdAt": "2026-09-11T20:16:40.332Z",
+        "id": "WPiLi1dhTYs2ov71",
+        "name": "Vitalii Pokhyl <pokhylvitalii@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "4a00a311-544e-4270-a735-25e36206388c"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": null,
+    "description": null
+  }
+}
